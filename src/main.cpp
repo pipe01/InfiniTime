@@ -309,10 +309,76 @@ void enable_dcdc_regulator() {
   NRF_POWER->DCDCEN = 1;
 }
 
+#include "main_plugin.h"
+
+int constant = 123123;
+
+typedef Plugin *(*CreatePlugin_f)();
+typedef int (*CreatePlugin2_f)();
+
 int main() {
+  const uint32_t plugin_addr = 0x20000;
+  const uint32_t *plugin_u32 = (uint32_t *)plugin_addr;
+
+  constant++;
+
+  // size_t sym_size = 0;
+  // while (*plugin_data != 0xFFFFFFFF)
+  // {
+  //   plugin_data++;
+  //   sym_size++;
+  // }
+
+  // plugin_data++;
+
+  size_t got_count = 0;
+  while (plugin_u32[got_count] != 0xFFFFFFFF)
+  {
+    got_count++;
+  }
+
+  uint8_t *plugin_mem = (uint8_t *)malloc(0x100); // TODO: calculate size
+
+  uint32_t *got = (uint32_t *)malloc(got_count * 4);
+  memcpy(got, plugin_u32, got_count * 4);
+
+  for (size_t i = 0; i < got_count; i++)
+  {
+    bool is_ram = (got[i] & 0x20000000) == 0x20000000;
+
+    if (is_ram)
+      got[i] = got[i] - 0x20000000 + (uint32_t)plugin_mem;
+    else
+      got[i] += plugin_addr;
+  }
+
+  CreatePlugin_f createPlugin = reinterpret_cast<CreatePlugin_f>(plugin_addr + (got_count * 4) + 4);
+
+  uint32_t got_addr = reinterpret_cast<uint32_t>(got);
+  asm volatile(
+    "mov r9, %0\n\t"
+    :
+    : "r" (got_addr)
+    : "r9"
+  );
+
+  Plugin* plugin = createPlugin();
+  (void)plugin;
+
+  int n = plugin->Run();
+  (void)n;
+
+  // NRF_LOG_INFO("Plugin returned %d", n);
+
+  for(;;){}
+  
+  return constant;
+
   enable_dcdc_regulator();
   logger.Init();
 
+  NRF_LOG_INFO("Starting InfiniTime");
+  
   nrf_drv_clock_init();
   nrf_drv_clock_lfclk_request(nullptr);
 
