@@ -313,14 +313,22 @@ void enable_dcdc_regulator() {
 
 int constant = 123123;
 
-typedef Plugin *(*CreatePlugin_f)();
+typedef Plugin* (*CreatePlugin_f)();
 typedef int (*CreatePlugin2_f)();
+
+int __attribute__ ((noinline)) two() {
+  return 2;
+}
+
+int __attribute__ ((noinline)) three() {
+  return 3;
+}
 
 int main() {
   const uint32_t plugin_addr = 0x20000;
-  const uint32_t *plugin_u32 = (uint32_t *)plugin_addr;
+  const uint32_t* plugin_u32 = (uint32_t*) plugin_addr;
 
-  constant++;
+  constant = two() + three();
 
   // size_t sym_size = 0;
   // while (*plugin_data != 0xFFFFFFFF)
@@ -331,54 +339,74 @@ int main() {
 
   // plugin_data++;
 
-  size_t got_count = 0;
-  while (plugin_u32[got_count] != 0xFFFFFFFF)
-  {
-    got_count++;
+  const uint32_t* ptr = plugin_u32;
+
+  size_t rel_count = 0;
+  while (*ptr != 0xFFFFFFFF) {
+    ptr += 2;
+    rel_count++;
   }
 
-  uint8_t *plugin_mem = (uint8_t *)malloc(0x100); // TODO: calculate size
+  uint8_t* plugin_mem = (uint8_t*) malloc(0x100); // TODO: calculate size
 
-  uint32_t *got = (uint32_t *)malloc(got_count * 4);
-  memcpy(got, plugin_u32, got_count * 4);
+  uint32_t* got = (uint32_t*) malloc(rel_count * 4);
+  // memcpy(got, plugin_u32, rel_count * 4);
 
-  for (size_t i = 0; i < got_count; i++)
-  {
-    bool is_ram = (got[i] & 0x20000000) == 0x20000000;
+  for (size_t i = 0; i < rel_count; i++) {
+    uint32_t rel_location = plugin_u32[i * 2];
+    uint32_t rel_target = plugin_u32[i * 2 + 1];
 
-    if (is_ram)
-      got[i] = got[i] - 0x20000000 + (uint32_t)plugin_mem;
+    if (rel_location == 0xEEEEEEEE && rel_target == 0xEEEEEEEE) {
+      continue;
+    }
+
+    bool is_location_ram = (rel_location & 0x20000000) != 0;
+
+    bool is_target_ram = (rel_target & 0x20000000) != 0;
+    bool is_target_infinitime = (rel_target & (1 << 31)) != 0;
+
+    // If target is in infinitime, clear mark bit and set as-is
+    // If target is in plugin and in memory, add plugin memory base address
+    // If target is in plugin and in code, add plugin code base address
+
+    if (is_target_infinitime) {
+      rel_target &= ~(1 << 31);
+    } else {
+      if (is_target_ram) {
+        rel_target = rel_target - 0x20000000 + (uint32_t) plugin_mem;
+      } else {
+        rel_target += plugin_addr;
+      }
+    }
+
+    if (is_location_ram)
+      plugin_mem[rel_location - 0x20000000] = rel_target;
     else
-      got[i] += plugin_addr;
+      got[rel_location] = rel_target;
   }
 
-  CreatePlugin_f createPlugin = reinterpret_cast<CreatePlugin_f>(plugin_addr + (got_count * 4) + 4);
+  CreatePlugin_f createPlugin = reinterpret_cast<CreatePlugin_f>(plugin_addr + (rel_count * 8) + 4);
 
-  uint32_t got_addr = reinterpret_cast<uint32_t>(got);
-  asm volatile(
-    "mov r9, %0\n\t"
-    :
-    : "r" (got_addr)
-    : "r9"
-  );
+  asm volatile("mov r9, %0\n\t" : : "r"(got) : "r9");
 
   Plugin* plugin = createPlugin();
-  (void)plugin;
+  (void) plugin;
 
-  int n = plugin->Run();
-  (void)n;
+  // int n = plugin->Run();
+  // (void) n;
 
   // NRF_LOG_INFO("Plugin returned %d", n);
 
-  for(;;){}
-  
+  for (;;) {
+  }
+
   return constant;
 
   enable_dcdc_regulator();
   logger.Init();
 
   NRF_LOG_INFO("Starting InfiniTime");
-  
+
   nrf_drv_clock_init();
   nrf_drv_clock_lfclk_request(nullptr);
 

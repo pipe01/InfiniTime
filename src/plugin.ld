@@ -8,13 +8,17 @@ MEMORY {
 SECTIONS {
   .got : {
     got_start = .;
-    *(.got .got.plt);
+    *(.got);
+    got_plt_start = .;
+    *(.got.plt);
     got_end = .;
   } > rom
 
   .got.pad : {
     FILL(0xAA);
-    . += 1K;
+
+    /* Each GOT entry originally takes 1 word but our loader format needs 2 words per entry, so we reserve enough space */
+    . += got_end - got_start;
   } > rom
 
   .init : {
@@ -54,3 +58,5 @@ data_start = ADDR(.data);
 data_end = data_start + SIZEOF(.data);
 
 rom_data_start = LOADADDR(.data);
+
+ram_size = SIZEOF(.bss) + SIZEOF(.data);
