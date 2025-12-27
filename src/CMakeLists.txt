@@ -355,6 +355,10 @@ set(LVGL_SRC
         libs/lvgl/src/lv_widgets/lv_win.c
         )
 
+list(APPEND PAWN_SRC
+        pawn/amx.c
+)
+
 list(APPEND IMAGE_FILES
         displayapp/icons/battery/batteryicon.c
         )
@@ -398,6 +402,7 @@ list(APPEND SOURCE_FILES
         displayapp/screens/Alarm.cpp
         displayapp/screens/Styles.cpp
         displayapp/screens/WeatherSymbols.cpp
+        displayapp/screens/Pawn.cpp
         displayapp/Colors.cpp
         displayapp/widgets/Counter.cpp
         displayapp/widgets/PageIndicator.cpp
@@ -900,6 +905,19 @@ target_compile_options(lvgl PRIVATE
         $<$<COMPILE_LANGUAGE:ASM>: ${ASM_FLAGS}>
         )
 
+# pawn
+add_library(pawn STATIC ${PAWN_SRC})
+target_include_directories(pawn SYSTEM PUBLIC . ../)
+target_include_directories(pawn SYSTEM PUBLIC ${INCLUDES_FROM_LIBS})
+target_compile_options(pawn PRIVATE
+        ${COMMON_FLAGS}
+        -DAMX_ANSIONLY
+        $<$<CONFIG:DEBUG>: ${DEBUG_FLAGS}>
+        $<$<CONFIG:RELEASE>: ${RELEASE_FLAGS}>
+        $<$<COMPILE_LANGUAGE:CXX>: ${CXX_FLAGS}>
+        $<$<COMPILE_LANGUAGE:ASM>: ${ASM_FLAGS}>
+        )
+
 # LITTLEFS_SRC
 add_library(littlefs STATIC ${LITTLEFS_SRC})
 target_include_directories(littlefs SYSTEM PUBLIC . ../)
@@ -918,7 +936,7 @@ set(EXECUTABLE_FILE_NAME ${EXECUTABLE_NAME}-${pinetime_VERSION_MAJOR}.${pinetime
 set(NRF5_LINKER_SCRIPT "${CMAKE_SOURCE_DIR}/gcc_nrf52.ld")
 add_executable(${EXECUTABLE_NAME} ${SOURCE_FILES})
 set_target_properties(${EXECUTABLE_NAME} PROPERTIES OUTPUT_NAME ${EXECUTABLE_FILE_NAME})
-target_link_libraries(${EXECUTABLE_NAME} nimble nrf-sdk lvgl littlefs infinitime_fonts infinitime_apps)
+target_link_libraries(${EXECUTABLE_NAME} nimble nrf-sdk lvgl pawn littlefs infinitime_fonts infinitime_apps)
 target_compile_options(${EXECUTABLE_NAME} PUBLIC
         ${COMMON_FLAGS}
         ${WARNING_FLAGS}
@@ -952,7 +970,7 @@ set(IMAGE_MCUBOOT_FILE_NAME_BIN ${EXECUTABLE_MCUBOOT_NAME}-image-${pinetime_VERS
 set(DFU_MCUBOOT_FILE_NAME ${EXECUTABLE_MCUBOOT_NAME}-dfu-${pinetime_VERSION_MAJOR}.${pinetime_VERSION_MINOR}.${pinetime_VERSION_PATCH}.zip)
 set(NRF5_LINKER_SCRIPT_MCUBOOT "${CMAKE_SOURCE_DIR}/gcc_nrf52-mcuboot.ld")
 add_executable(${EXECUTABLE_MCUBOOT_NAME} ${SOURCE_FILES})
-target_link_libraries(${EXECUTABLE_MCUBOOT_NAME} nimble nrf-sdk lvgl littlefs infinitime_fonts infinitime_apps)
+target_link_libraries(${EXECUTABLE_MCUBOOT_NAME} nimble nrf-sdk lvgl pawn littlefs infinitime_fonts infinitime_apps)
 set_target_properties(${EXECUTABLE_MCUBOOT_NAME} PROPERTIES OUTPUT_NAME ${EXECUTABLE_MCUBOOT_FILE_NAME})
 target_compile_options(${EXECUTABLE_MCUBOOT_NAME} PUBLIC
         ${COMMON_FLAGS}
