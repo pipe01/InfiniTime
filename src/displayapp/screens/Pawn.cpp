@@ -211,14 +211,36 @@ static cell AMX_NATIVE_CALL F_sprintf(AMX* amx, const cell* params) {
   return ret;
 }
 
-Pawn::Pawn() {
+
+static int load_program(AMX* amx, const uint8_t* data) {
+  AMX_HEADER hdr;
+  memcpy(&hdr, data, sizeof(hdr));
+
+  if (hdr.magic != AMX_MAGIC)
+    return AMX_ERR_FORMAT;
+
+  void* memblock = malloc(hdr.stp);
+  if (memblock == NULL)
+    return AMX_ERR_MEMORY;
+
+  memcpy(memblock, data, hdr.size);
+
+  memset(amx, 0, sizeof(*amx));
+
+  int result = amx_Init(amx, memblock);
+  if (result != AMX_ERR_NONE) {
+    free(memblock);
+    amx->base = NULL;
+  }
+
+  return result;
+}
+
+Pawn::Pawn(Controllers::DateTime& dateTimeController) : dateTimeController(dateTimeController) {
 #include "program.h"
 
-  uint8_t* prog = new uint8_t[program_len];
-  memcpy(prog, program, program_len);
-
-  memset(&amx, 0, sizeof(amx));
-  amx_Init(&amx, prog);
+  load_program(&amx, program);
+  (void) program_len;
 
   amx.userdata[0] = this;
 
@@ -261,7 +283,7 @@ Pawn::~Pawn() {
   lv_obj_clean(lv_scr_act());
 
   amx_Cleanup(&amx);
-  delete amx.base;
+  free(amx.base);
 }
 
 void Pawn::Refresh() {
