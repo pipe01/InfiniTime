@@ -3,6 +3,14 @@
 
 using namespace Pinetime::Applications::Screens;
 
+#define AMX_ERR_PARAMCOUNT 32
+
+#define ASSERT_PARAMS(n)                                                                                                                   \
+  if (params[0] != n * sizeof(cell)) {                                                                                                     \
+    amx_RaiseError(amx, AMX_ERR_PARAMCOUNT);                                                                                               \
+    return 0;                                                                                                                              \
+  }
+
 static void event_handler(lv_obj_t* obj, lv_event_t event) {
   AMX* amx = (AMX*) lv_obj_get_user_data(lv_scr_act());
   int handler_index = (int) lv_obj_get_user_data(obj);
@@ -11,29 +19,41 @@ static void event_handler(lv_obj_t* obj, lv_event_t event) {
   amx_Exec(amx, nullptr, handler_index);
 }
 
-static cell AMX_NATIVE_CALL F_lv_scr_act(AMX*, const cell*) {
+static cell AMX_NATIVE_CALL F_lv_scr_act(AMX* amx, const cell* params) {
+  ASSERT_PARAMS(0);
+
   return (cell) lv_scr_act();
 }
 
-static cell AMX_NATIVE_CALL F_lv_label_create(AMX*, const cell* params) {
+static cell AMX_NATIVE_CALL F_lv_label_create(AMX* amx, const cell* params) {
+  ASSERT_PARAMS(2);
+
   return (cell) lv_label_create((lv_obj_t*) params[1] ?: lv_scr_act(), (lv_obj_t*) params[2]);
 }
 
-static cell AMX_NATIVE_CALL F_lv_btn_create(AMX*, const cell* params) {
+static cell AMX_NATIVE_CALL F_lv_btn_create(AMX* amx, const cell* params) {
+  ASSERT_PARAMS(2);
+
   return (cell) lv_btn_create((lv_obj_t*) params[1] ?: lv_scr_act(), (lv_obj_t*) params[2]);
 }
 
-static cell AMX_NATIVE_CALL F_lv_obj_set_pos(AMX*, const cell* params) {
+static cell AMX_NATIVE_CALL F_lv_obj_set_pos(AMX* amx, const cell* params) {
+  ASSERT_PARAMS(3);
+
   lv_obj_set_pos((lv_obj_t*) params[1], params[2], params[3]);
   return 0;
 }
 
-static cell AMX_NATIVE_CALL F_lv_obj_set_size(AMX*, const cell* params) {
+static cell AMX_NATIVE_CALL F_lv_obj_set_size(AMX* amx, const cell* params) {
+  ASSERT_PARAMS(3);
+
   lv_obj_set_size((lv_obj_t*) params[1], params[2], params[3]);
   return 0;
 }
 
 static cell AMX_NATIVE_CALL F_lv_obj_set_event_cb(AMX* amx, const cell* params) {
+  ASSERT_PARAMS(2);
+
   lv_obj_t* obj = (lv_obj_t*) params[1];
 
   char* name;
@@ -50,6 +70,8 @@ static cell AMX_NATIVE_CALL F_lv_obj_set_event_cb(AMX* amx, const cell* params) 
 }
 
 static cell AMX_NATIVE_CALL F_lv_label_set_text(AMX* amx, const cell* params) {
+  ASSERT_PARAMS(2);
+
   lv_obj_t* label = (lv_obj_t*) params[1];
 
   char* text;
@@ -59,6 +81,45 @@ static cell AMX_NATIVE_CALL F_lv_label_set_text(AMX* amx, const cell* params) {
   else
     lv_label_set_text(label, "<invalid>");
 
+  return 0;
+}
+
+static cell AMX_NATIVE_CALL F_lv_obj_set_style_local_int(AMX* amx, const cell* params) {
+  ASSERT_PARAMS(5);
+
+  lv_obj_t* obj = (lv_obj_t*) params[1];
+  cell prop = params[2];
+  cell value = params[3];
+  cell part = params[4];
+  cell state = params[5];
+
+  _lv_obj_set_style_local_int(obj, part, prop | (state << LV_STYLE_STATE_POS), value);
+  return 0;
+}
+
+static cell AMX_NATIVE_CALL F_lv_obj_set_style_local_color(AMX* amx, const cell* params) {
+  ASSERT_PARAMS(5);
+
+  lv_obj_t* obj = (lv_obj_t*) params[1];
+  cell prop = params[2];
+  cell value = params[3];
+  cell part = params[4];
+  cell state = params[5];
+
+  _lv_obj_set_style_local_color(obj, part, prop | (state << LV_STYLE_STATE_POS), lv_color_hex(value));
+  return 0;
+}
+
+static cell AMX_NATIVE_CALL F_lv_obj_set_style_local_opa(AMX* amx, const cell* params) {
+  ASSERT_PARAMS(5);
+
+  lv_obj_t* obj = (lv_obj_t*) params[1];
+  cell prop = params[2];
+  cell value = params[3];
+  cell part = params[4];
+  cell state = params[5];
+
+  _lv_obj_set_style_local_opa(obj, part, prop | (state << LV_STYLE_STATE_POS), value);
   return 0;
 }
 
@@ -144,6 +205,9 @@ Pawn::Pawn() {
     {"lv_obj_set_size", F_lv_obj_set_size},
     {"lv_label_set_text", F_lv_label_set_text},
     {"lv_obj_set_event_cb", F_lv_obj_set_event_cb},
+    {"lv_obj_set_style_local_int", F_lv_obj_set_style_local_int},
+    {"lv_obj_set_style_local_color", F_lv_obj_set_style_local_color},
+    {"lv_obj_set_style_local_opa", F_lv_obj_set_style_local_opa},
     {0, 0} /* terminator */
   };
   amx_Register(&amx, natives, -1);
