@@ -21,7 +21,7 @@ namespace Pinetime {
         AMX amx;
         int refresh_index;
 
-        lv_task_t* taskRefresh;
+        lv_task_t* taskRefresh = 0;
       };
     }
 

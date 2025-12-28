@@ -221,7 +221,9 @@ Pawn::Pawn() {
 }
 
 Pawn::~Pawn() {
-  lv_task_del(taskRefresh);
+  if (taskRefresh)
+    lv_task_del(taskRefresh);
+
   lv_obj_clean(lv_scr_act());
 
   amx_Cleanup(&amx);
