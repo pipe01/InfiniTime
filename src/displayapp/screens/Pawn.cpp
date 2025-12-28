@@ -5,15 +5,48 @@ using namespace Pinetime::Applications::Screens;
 
 #include "program.h"
 
-static cell AMX_NATIVE_CALL F_lv_label_create(AMX*, const cell*) {
-  lv_obj_t* label = lv_label_create(lv_scr_act(), nullptr);
+static void event_handler(lv_obj_t* obj, lv_event_t event) {
+  AMX* amx = (AMX*) lv_obj_get_user_data(lv_scr_act());
+  int handler_index = (int) lv_obj_get_user_data(obj);
 
-  return (cell) label;
+  amx_Push(amx, event);
+  amx_Exec(amx, nullptr, handler_index);
+}
+
+static cell AMX_NATIVE_CALL F_lv_scr_act(AMX*, const cell*) {
+  return (cell) lv_scr_act();
+}
+
+static cell AMX_NATIVE_CALL F_lv_label_create(AMX*, const cell* params) {
+  return (cell) lv_label_create((lv_obj_t*) params[1] ?: lv_scr_act(), (lv_obj_t*) params[2]);
+}
+
+static cell AMX_NATIVE_CALL F_lv_btn_create(AMX*, const cell* params) {
+  return (cell) lv_btn_create((lv_obj_t*) params[1] ?: lv_scr_act(), (lv_obj_t*) params[2]);
 }
 
 static cell AMX_NATIVE_CALL F_lv_obj_set_pos(AMX*, const cell* params) {
-  lv_obj_t* label = (lv_obj_t*) params[1];
-  lv_obj_set_pos(label, params[2], params[3]);
+  lv_obj_set_pos((lv_obj_t*) params[1], params[2], params[3]);
+  return 0;
+}
+
+static cell AMX_NATIVE_CALL F_lv_obj_set_size(AMX*, const cell* params) {
+  lv_obj_set_size((lv_obj_t*) params[1], params[2], params[3]);
+  return 0;
+}
+
+static cell AMX_NATIVE_CALL F_lv_obj_set_event_cb(AMX* amx, const cell* params) {
+  lv_obj_t* obj = (lv_obj_t*) params[1];
+
+  char* name;
+  amx_StrParam_Type(amx, params[2], name, char*);
+  if (name != NULL) {
+    int index;
+    if (amx_FindPublic(amx, name, &index) == AMX_ERR_NONE) {
+      lv_obj_set_user_data(obj, (void*) index);
+      lv_obj_set_event_cb(obj, event_handler);
+    }
+  }
 
   return 0;
 }
@@ -35,12 +68,12 @@ static cell AMX_NATIVE_CALL F_sprintf(AMX* amx, const cell* params) {
   // param[0] is the number of total parameter bytes, divide it by cell size and subtract 3 to account for the fixed parameters
   int args_count = params[0] / sizeof(cell) - 3;
 
-  cell *output = amx_Address(amx, params[1]);
-  cell output_size = params[2];
+  cell* output = amx_Address(amx, params[1]);
+  cell output_size = params[2] * sizeof(cell); // We assume the output array is packed, TODO: add a separate sprintf_unpacked function?
 
   char buf[output_size];
 
-  char *fmt;
+  char* fmt;
   amx_StrParam_Type(amx, params[3], fmt, char*);
   if (fmt == NULL)
     return 0;
@@ -48,29 +81,41 @@ static cell AMX_NATIVE_CALL F_sprintf(AMX* amx, const cell* params) {
   cell ret = 0;
 
 #pragma GCC diagnostic ignored "-Wformat-nonliteral"
-  switch (args_count)
-  {
-  case 0:
-    strcpy(buf, fmt);
-    ret = strlen(fmt) + 1;
-    break;
-  case 1:
-    ret = snprintf(buf, output_size, fmt, *amx_Address(amx, params[4]));
-    break;
-  case 2:
-    ret = snprintf(buf, output_size, fmt, *amx_Address(amx, params[4]), *amx_Address(amx, params[5]));
-    break;
-  case 3:
-    ret = snprintf(buf, output_size, fmt, *amx_Address(amx, params[4]), *amx_Address(amx, params[5]), *amx_Address(amx, params[6]));
-    break;
-  case 4:
-    ret = snprintf(buf, output_size, fmt, *amx_Address(amx, params[4]), *amx_Address(amx, params[5]), *amx_Address(amx, params[6]), *amx_Address(amx, params[7]));
-    break;
-  case 5:
-    ret = snprintf(buf, output_size, fmt, *amx_Address(amx, params[4]), *amx_Address(amx, params[5]), *amx_Address(amx, params[6]), *amx_Address(amx, params[7]), *amx_Address(amx, params[8]));
-    break;
-  default:
-    return 0;
+  switch (args_count) {
+    case 0:
+      strcpy(buf, fmt);
+      ret = strlen(fmt) + 1;
+      break;
+    case 1:
+      ret = snprintf(buf, output_size, fmt, *amx_Address(amx, params[4]));
+      break;
+    case 2:
+      ret = snprintf(buf, output_size, fmt, *amx_Address(amx, params[4]), *amx_Address(amx, params[5]));
+      break;
+    case 3:
+      ret = snprintf(buf, output_size, fmt, *amx_Address(amx, params[4]), *amx_Address(amx, params[5]), *amx_Address(amx, params[6]));
+      break;
+    case 4:
+      ret = snprintf(buf,
+                     output_size,
+                     fmt,
+                     *amx_Address(amx, params[4]),
+                     *amx_Address(amx, params[5]),
+                     *amx_Address(amx, params[6]),
+                     *amx_Address(amx, params[7]));
+      break;
+    case 5:
+      ret = snprintf(buf,
+                     output_size,
+                     fmt,
+                     *amx_Address(amx, params[4]),
+                     *amx_Address(amx, params[5]),
+                     *amx_Address(amx, params[6]),
+                     *amx_Address(amx, params[7]),
+                     *amx_Address(amx, params[8]));
+      break;
+    default:
+      return 0;
   }
 #pragma GCC diagnostic warning "-Wformat-nonliteral"
 
@@ -88,19 +133,24 @@ Pawn::Pawn() {
 
   amx.userdata[0] = this;
 
+  lv_obj_set_user_data(lv_scr_act(), &amx);
+
   static AMX_NATIVE_INFO natives[] = {
     {"sprintf", F_sprintf},
+    {"lv_scr_act", F_lv_scr_act},
     {"lv_label_create", F_lv_label_create},
+    {"lv_btn_create", F_lv_btn_create},
     {"lv_obj_set_pos", F_lv_obj_set_pos},
+    {"lv_obj_set_size", F_lv_obj_set_size},
     {"lv_label_set_text", F_lv_label_set_text},
+    {"lv_obj_set_event_cb", F_lv_obj_set_event_cb},
     {0, 0} /* terminator */
   };
   amx_Register(&amx, natives, -1);
 
   amx_Exec(&amx, NULL, AMX_EXEC_MAIN);
 
-  if (amx_FindPublic(&amx, "@refresh", &refresh_index) == AMX_ERR_NONE)
-  {
+  if (amx_FindPublic(&amx, "@refresh", &refresh_index) == AMX_ERR_NONE) {
     taskRefresh = lv_task_create(RefreshTaskCallback, LV_DISP_DEF_REFR_PERIOD, LV_TASK_PRIO_MID, this);
     Refresh();
   }
