@@ -3,8 +3,6 @@
 
 using namespace Pinetime::Applications::Screens;
 
-#include "program.h"
-
 static void event_handler(lv_obj_t* obj, lv_event_t event) {
   AMX* amx = (AMX*) lv_obj_get_user_data(lv_scr_act());
   int handler_index = (int) lv_obj_get_user_data(obj);
@@ -125,6 +123,8 @@ static cell AMX_NATIVE_CALL F_sprintf(AMX* amx, const cell* params) {
 }
 
 Pawn::Pawn() {
+#include "program.h"
+
   uint8_t* prog = new uint8_t[program_len];
   memcpy(prog, program, program_len);
 
