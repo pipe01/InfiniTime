@@ -5,6 +5,7 @@
 #include "displayapp/Controllers.h"
 #include "components/datetime/DateTimeController.h"
 #include "utility/DirtyValue.h"
+#include "displayapp/widgets/StatusIcons.h"
 #include <chrono>
 
 #include "pawn/amx.h"
@@ -15,13 +16,15 @@ namespace Pinetime {
 
       class Pawn : public Screen {
       public:
-        Pawn(Controllers::DateTime& dateTimeController);
+        Pawn(AppControllers& controllers);
         ~Pawn() override;
 
         void Refresh() override;
 
         Utility::DirtyValue<std::chrono::time_point<std::chrono::system_clock, std::chrono::minutes>> currentDateTime {};
-        Controllers::DateTime& dateTimeController;
+        AppControllers& controllers;
+
+        Widgets::StatusIcons* statusIcons = nullptr;
 
       private:
         AMX amx;
@@ -40,7 +43,8 @@ namespace Pinetime {
       static constexpr const char* icon = "P";
 
       static Screens::Screen* Create(AppControllers& controllers) {
-        return new Screens::Pawn(controllers.dateTimeController);
+        // sizeof(Pawn)
+        return new Screens::Pawn(controllers);
       };
 
       static bool IsAvailable(Pinetime::Controllers::FS& /*filesystem*/) {

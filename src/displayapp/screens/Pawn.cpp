@@ -20,6 +20,8 @@ using namespace Pinetime::Applications::Screens;
 
 #define PARAMS_OBJ(i) ((lv_obj_t*) params[i])
 
+#define PAWN_INST ((Pawn*) amx->userdata[0])
+
 static void event_handler(lv_obj_t* obj, lv_event_t event) {
   AMX* amx = (AMX*) lv_obj_get_user_data(lv_scr_act());
   int handler_index = (int) lv_obj_get_user_data(obj);
@@ -271,18 +273,18 @@ static cell AMX_NATIVE_CALL F_sprintf(AMX* amx, const cell* params) {
 static cell AMX_NATIVE_CALL F_get_datetime(AMX* amx, const cell* params) {
   ASSERT_PARAMS(1);
 
-  Pawn* pawn = (Pawn*) amx->userdata[0];
+  Pawn* pawn = PAWN_INST;
 
-  pawn->currentDateTime = std::chrono::time_point_cast<std::chrono::minutes>(pawn->dateTimeController.CurrentDateTime());
+  pawn->currentDateTime = std::chrono::time_point_cast<std::chrono::minutes>(pawn->controllers.dateTimeController.CurrentDateTime());
 
   cell* ret = amx_Address(amx, params[1]);
 
   ret[0] = pawn->currentDateTime.IsUpdated();
-  ret[1] = pawn->dateTimeController.Seconds();
-  ret[2] = pawn->dateTimeController.Minutes();
-  ret[3] = pawn->dateTimeController.Hours();
-  ret[4] = pawn->dateTimeController.Day();
-  ret[5] = pawn->dateTimeController.Year();
+  ret[1] = pawn->controllers.dateTimeController.Seconds();
+  ret[2] = pawn->controllers.dateTimeController.Minutes();
+  ret[3] = pawn->controllers.dateTimeController.Hours();
+  ret[4] = pawn->controllers.dateTimeController.Day();
+  ret[5] = pawn->controllers.dateTimeController.Year();
 
   return 0;
 }
@@ -290,19 +292,39 @@ static cell AMX_NATIVE_CALL F_get_datetime(AMX* amx, const cell* params) {
 static cell AMX_NATIVE_CALL F_get_datetime_short_str(AMX* amx, const cell* params) {
   ASSERT_PARAMS(2);
 
-  Pawn* pawn = (Pawn*) amx->userdata[0];
+  Pawn* pawn = PAWN_INST;
 
   cell* ret_day = amx_Address(amx, params[1]);
   cell* ret_month = amx_Address(amx, params[2]);
 
   if (ret_day != NULL) {
-    const char* day = pawn->dateTimeController.DayOfWeekShortToString();
+    const char* day = pawn->controllers.dateTimeController.DayOfWeekShortToString();
     amx_SetString(ret_day, day, true, false, 4);
   }
   if (ret_month != NULL) {
-    const char* month = pawn->dateTimeController.MonthShortToString();
+    const char* month = pawn->controllers.dateTimeController.MonthShortToString();
     amx_SetString(ret_month, month, true, false, 4);
   }
+
+  return 0;
+}
+
+static cell AMX_NATIVE_CALL F_status_icons_create(AMX* amx, const cell*) {
+  Pawn* pawn = PAWN_INST;
+
+  if (pawn->statusIcons == nullptr) {
+    pawn->statusIcons = new Pinetime::Applications::Widgets::StatusIcons(pawn->controllers.batteryController, pawn->controllers.bleController, pawn->controllers.alarmController);
+    pawn->statusIcons->Create();
+  }
+
+  return 0;
+}
+
+static cell AMX_NATIVE_CALL F_status_icons_update(AMX* amx, const cell*) {
+  Pawn* pawn = PAWN_INST;
+
+  if (pawn->statusIcons != nullptr)
+    pawn->statusIcons->Update();
 
   return 0;
 }
@@ -407,9 +429,11 @@ extern "C" const AMX_NATIVE pawn_natives[] = {
   F_lv_obj_set_style_local_ptr,
   F_get_datetime,
   F_get_datetime_short_str,
+  F_status_icons_create,
+  F_status_icons_update,
 };
 
-Pawn::Pawn(Controllers::DateTime& dateTimeController) : dateTimeController(dateTimeController) {
+Pawn::Pawn(AppControllers& controllers) : controllers(controllers) {
   LoadProgram();
 
   amx.userdata[0] = this;
@@ -431,6 +455,9 @@ Pawn::Pawn(Controllers::DateTime& dateTimeController) : dateTimeController(dateT
 Pawn::~Pawn() {
   if (taskRefresh)
     lv_task_del(taskRefresh);
+
+  if (statusIcons)
+    delete statusIcons;
 
   lv_obj_clean(lv_scr_act());
 
