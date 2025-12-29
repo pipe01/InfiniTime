@@ -357,6 +357,7 @@ set(LVGL_SRC
 
 list(APPEND PAWN_SRC
         pawn/amx.c
+        pawn/amxpool.c
 )
 
 list(APPEND IMAGE_FILES

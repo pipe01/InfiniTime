@@ -2,6 +2,12 @@
 #include <stdio.h>
 #include <charconv>
 
+extern "C" {
+#include "pawn/amxpool.h"
+}
+
+#include "program.h"
+
 using namespace Pinetime::Applications::Screens;
 
 #define AMX_ERR_PARAMCOUNT 32
@@ -301,6 +307,26 @@ static cell AMX_NATIVE_CALL F_get_datetime_short_str(AMX* amx, const cell* param
   return 0;
 }
 
+static int AMXAPI prun_Overlay(AMX* amx, int index) {
+  AMX_HEADER* hdr;
+  AMX_OVERLAYINFO* tbl;
+
+  hdr = (AMX_HEADER*) amx->base;
+  tbl = (AMX_OVERLAYINFO*) (amx->base + hdr->overlays) + index;
+
+  amx->codesize = tbl->size;
+  amx->code = (unsigned char*) amx_poolfind(index);
+
+  if (amx->code == NULL) {
+    if ((amx->code = (unsigned char*) amx_poolalloc(tbl->size, index)) == NULL)
+      return AMX_ERR_OVERLAY;
+
+    memcpy(amx->code, program + hdr->cod + tbl->offset, tbl->size);
+  }
+
+  return AMX_ERR_NONE;
+}
+
 static int load_program(AMX* amx, const uint8_t* data) {
   AMX_HEADER hdr;
   memcpy(&hdr, data, sizeof(hdr));
@@ -308,17 +334,24 @@ static int load_program(AMX* amx, const uint8_t* data) {
   if (hdr.magic != AMX_MAGIC)
     return AMX_ERR_FORMAT;
 
-  void* memblock = malloc(hdr.stp);
-  if (memblock == NULL)
-    return AMX_ERR_MEMORY;
+  void* header = malloc(hdr.cod);
+  memcpy(header, data, hdr.cod);
 
-  memcpy(memblock, data, hdr.size);
+  void* datablock = malloc(hdr.stp - hdr.dat); // This block contains data, heap and stack
+  memcpy(datablock, data + hdr.dat, hdr.hea - hdr.dat);
+
+  constexpr int poolsize = 512;
+  void* overlaypool = malloc(poolsize + 8);
+
+  amx_poolinit(overlaypool, poolsize + 8);
 
   memset(amx, 0, sizeof(*amx));
+  amx->data = (unsigned char*) datablock;
+  amx->overlay = prun_Overlay;
 
-  int result = amx_Init(amx, memblock);
+  int result = amx_Init(amx, header);
   if (result != AMX_ERR_NONE) {
-    free(memblock);
+    free(datablock);
     amx->base = NULL;
   }
 
@@ -343,8 +376,6 @@ extern "C" const AMX_NATIVE pawn_natives[] = {
   F_get_datetime,
   F_get_datetime_short_str,
 };
-
-#include "program.h"
 
 Pawn::Pawn(Controllers::DateTime& dateTimeController) : dateTimeController(dateTimeController) {
   load_program(&amx, program);
