@@ -20,7 +20,6 @@ namespace Pinetime {
 
         void Refresh() override;
 
-
         Utility::DirtyValue<std::chrono::time_point<std::chrono::system_clock, std::chrono::minutes>> currentDateTime {};
         Controllers::DateTime& dateTimeController;
 
@@ -28,6 +27,10 @@ namespace Pinetime {
         AMX amx;
         int refresh_index;
         lv_task_t* taskRefresh = 0;
+
+        void *header = nullptr, *datablock = nullptr, *overlaypool = nullptr;
+
+        int LoadProgram();
       };
     }
 

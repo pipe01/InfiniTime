@@ -327,32 +327,64 @@ static int AMXAPI prun_Overlay(AMX* amx, int index) {
   return AMX_ERR_NONE;
 }
 
-static int load_program(AMX* amx, const uint8_t* data) {
+int Pawn::LoadProgram() {
+  (void) program_len;
+
+  int result;
   AMX_HEADER hdr;
-  memcpy(&hdr, data, sizeof(hdr));
+  memcpy(&hdr, program, sizeof(hdr));
 
   if (hdr.magic != AMX_MAGIC)
     return AMX_ERR_FORMAT;
 
-  void* header = malloc(hdr.cod);
-  memcpy(header, data, hdr.cod);
+  memset(&amx, 0, sizeof(amx));
 
-  void* datablock = malloc(hdr.stp - hdr.dat); // This block contains data, heap and stack
-  memcpy(datablock, data + hdr.dat, hdr.hea - hdr.dat);
+  header = malloc(hdr.cod);
+  if (header == NULL)
+    return AMX_ERR_MEMORY;
 
-  constexpr int poolsize = 512;
-  void* overlaypool = malloc(poolsize + 8);
+  memcpy(header, program, hdr.cod);
 
-  amx_poolinit(overlaypool, poolsize + 8);
+  if (hdr.flags & AMX_FLAG_OVERLAY) {
+    datablock = malloc(hdr.stp - hdr.dat); // This block contains data, heap and stack
+    if (datablock == NULL)
+      return AMX_ERR_MEMORY;
 
-  memset(amx, 0, sizeof(*amx));
-  amx->data = (unsigned char*) datablock;
-  amx->overlay = prun_Overlay;
+    memcpy(datablock, program + hdr.dat, hdr.hea - hdr.dat);
 
-  int result = amx_Init(amx, header);
-  if (result != AMX_ERR_NONE) {
-    free(datablock);
-    amx->base = NULL;
+    constexpr int poolsize = 512;
+    overlaypool = malloc(poolsize + 8);
+    if (overlaypool == NULL)
+      return AMX_ERR_MEMORY;
+
+    amx_poolinit(overlaypool, poolsize + 8);
+
+    amx.data = (unsigned char*) datablock;
+    amx.overlay = prun_Overlay;
+
+    result = amx_Init(&amx, header);
+    if (result != AMX_ERR_NONE) {
+      free(header);
+      header = NULL;
+      free(datablock);
+      datablock = NULL;
+      free(overlaypool);
+      overlaypool = NULL;
+    }
+  } else {
+    datablock = malloc(hdr.stp); // This block contains code, data, heap and stack
+    if (datablock == NULL)
+      return AMX_ERR_MEMORY;
+
+    memcpy(datablock, program, hdr.size);
+
+    result = amx_Init(&amx, datablock);
+    if (result != AMX_ERR_NONE) {
+      free(header);
+      header = NULL;
+      free(datablock);
+      datablock = NULL;
+    }
   }
 
   return result;
@@ -378,8 +410,7 @@ extern "C" const AMX_NATIVE pawn_natives[] = {
 };
 
 Pawn::Pawn(Controllers::DateTime& dateTimeController) : dateTimeController(dateTimeController) {
-  load_program(&amx, program);
-  (void) program_len;
+  LoadProgram();
 
   amx.userdata[0] = this;
 
@@ -404,7 +435,13 @@ Pawn::~Pawn() {
   lv_obj_clean(lv_scr_act());
 
   amx_Cleanup(&amx);
-  free(amx.base);
+
+  if (header)
+    free(header);
+  if (datablock)
+    free(datablock);
+  if (overlaypool)
+    free(overlaypool);
 }
 
 void Pawn::Refresh() {
