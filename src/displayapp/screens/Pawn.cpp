@@ -10,11 +10,17 @@ extern "C" {
 
 using namespace Pinetime::Applications::Screens;
 
-#define AMX_ERR_PARAMCOUNT 32
+enum {
+  PAWN_ERR_PARAMCOUNT = 100,
+  PAWN_ERR_MISSINGHANDLER,
+  PAWN_ERR_INVALIDSTRING,
+
+  PAWN_ERR_FIRST = PAWN_ERR_PARAMCOUNT,
+};
 
 #define ASSERT_PARAMS(n)                                                                                                                   \
   if (params[0] != n * sizeof(cell)) {                                                                                                     \
-    amx_RaiseError(amx, AMX_ERR_PARAMCOUNT);                                                                                               \
+    amx_RaiseError(amx, PAWN_ERR_PARAMCOUNT);                                                                                              \
     return 0;                                                                                                                              \
   }
 
@@ -25,11 +31,17 @@ using namespace Pinetime::Applications::Screens;
 constexpr int max_overlay_size = 512;
 
 static void event_handler(lv_obj_t* obj, lv_event_t event) {
+  if (event == LV_EVENT_DELETE)
+    return;
+
   AMX* amx = (AMX*) lv_obj_get_user_data(lv_scr_act());
   int handler_index = (int) lv_obj_get_user_data(obj);
 
   amx_Push(amx, event);
-  amx_Exec(amx, nullptr, handler_index);
+  int result = amx_Exec(amx, nullptr, handler_index);
+  if (result != AMX_ERR_NONE) {
+    PAWN_INST->QueueError(result);
+  }
 }
 
 static cell AMX_NATIVE_CALL F_lv_scr_act(AMX* amx, const cell* params) {
@@ -76,6 +88,8 @@ static cell AMX_NATIVE_CALL F_lv_obj_set_event_cb(AMX* amx, const cell* params) 
     if (amx_FindPublic(amx, name, &index) == AMX_ERR_NONE) {
       lv_obj_set_user_data(obj, (void*) index);
       lv_obj_set_event_cb(obj, event_handler);
+    } else {
+      amx_RaiseError(amx, PAWN_ERR_MISSINGHANDLER);
     }
   }
 
@@ -92,7 +106,7 @@ static cell AMX_NATIVE_CALL F_lv_label_set_text(AMX* amx, const cell* params) {
   if (text != NULL)
     lv_label_set_text(label, text);
   else
-    lv_label_set_text_static(label, "<invalid>");
+    amx_RaiseError(amx, PAWN_ERR_INVALIDSTRING);
 
   return 0;
 }
@@ -179,7 +193,7 @@ static cell AMX_NATIVE_CALL F_sprintf(AMX* amx, const cell* params) {
   // param[0] is the number of total parameter bytes, divide it by cell size to get the parameter count
   int args_count = params[0] / sizeof(cell);
   if (args_count < 4) {
-    amx_RaiseError(amx, AMX_ERR_PARAMCOUNT);
+    amx_RaiseError(amx, PAWN_ERR_PARAMCOUNT);
     return 0;
   }
 
@@ -193,8 +207,10 @@ static cell AMX_NATIVE_CALL F_sprintf(AMX* amx, const cell* params) {
 
   char* fmt;
   amx_StrParam_Type(amx, params[3], fmt, char*);
-  if (fmt == NULL)
+  if (fmt == NULL) {
+    amx_RaiseError(amx, PAWN_ERR_INVALIDSTRING);
     return 0;
+  }
 
   size_t paramc = 4;
 
@@ -315,7 +331,9 @@ static cell AMX_NATIVE_CALL F_status_icons_create(AMX* amx, const cell*) {
   Pawn* pawn = PAWN_INST;
 
   if (pawn->statusIcons == nullptr) {
-    pawn->statusIcons = new Pinetime::Applications::Widgets::StatusIcons(pawn->controllers.batteryController, pawn->controllers.bleController, pawn->controllers.alarmController);
+    pawn->statusIcons = new Pinetime::Applications::Widgets::StatusIcons(pawn->controllers.batteryController,
+                                                                         pawn->controllers.bleController,
+                                                                         pawn->controllers.alarmController);
     pawn->statusIcons->Create();
   }
 
@@ -327,6 +345,14 @@ static cell AMX_NATIVE_CALL F_status_icons_update(AMX* amx, const cell*) {
 
   if (pawn->statusIcons != nullptr)
     pawn->statusIcons->Update();
+
+  return 0;
+}
+
+static cell AMX_NATIVE_CALL F_raise_error(AMX* amx, const cell* params) {
+  ASSERT_PARAMS(1);
+
+  amx_RaiseError(amx, params[1]);
 
   return 0;
 }
@@ -433,10 +459,15 @@ extern "C" const AMX_NATIVE pawn_natives[] = {
   F_get_datetime_short_str,
   F_status_icons_create,
   F_status_icons_update,
+  F_raise_error,
 };
 
 Pawn::Pawn(AppControllers& controllers) : controllers(controllers) {
-  LoadProgram();
+  int result = LoadProgram();
+  if (result != AMX_ERR_NONE) {
+    ShowError(result);
+    return;
+  }
 
   amx.userdata[0] = this;
 
@@ -446,7 +477,11 @@ Pawn::Pawn(AppControllers& controllers) : controllers(controllers) {
   if (amx_FindPubVar(&amx, "font_jmec", &font) == AMX_ERR_NONE)
     *font = (cell) &jetbrains_mono_extrabold_compressed;
 
-  amx_Exec(&amx, NULL, AMX_EXEC_MAIN);
+  result = amx_Exec(&amx, NULL, AMX_EXEC_MAIN);
+  if (result != AMX_ERR_NONE) {
+    ShowError(result);
+    return;
+  }
 
   if (amx_FindPublic(&amx, "@refresh", &refresh_index) == AMX_ERR_NONE) {
     taskRefresh = lv_task_create(RefreshTaskCallback, LV_DISP_DEF_REFR_PERIOD, LV_TASK_PRIO_MID, this);
@@ -454,14 +489,22 @@ Pawn::Pawn(AppControllers& controllers) : controllers(controllers) {
   }
 }
 
-Pawn::~Pawn() {
-  if (taskRefresh)
+void Pawn::CleanUI() {
+  if (taskRefresh) {
     lv_task_del(taskRefresh);
+    taskRefresh = nullptr;
+  }
 
-  if (statusIcons)
+  if (statusIcons) {
     delete statusIcons;
+    statusIcons = nullptr;
+  }
 
   lv_obj_clean(lv_scr_act());
+}
+
+Pawn::~Pawn() {
+  CleanUI();
 
   amx_Cleanup(&amx);
 
@@ -474,5 +517,60 @@ Pawn::~Pawn() {
 }
 
 void Pawn::Refresh() {
-  amx_Exec(&amx, NULL, refresh_index);
+  int result = amx_Exec(&amx, NULL, refresh_index);
+  if (result != AMX_ERR_NONE) {
+    ShowError(result);
+  }
+}
+
+void Pawn::ShowError(unsigned int amx_err) {
+  static const char* amx_err_msgs[] = {
+    nullptr,  "EXIT",   "ASSERT", "STACKERR", "BOUNDS",   "MEMACCESS", "INVINSTR", "STACKLOW", "HEAPLOW", "CALLBACK",
+    "NATIVE", "DIVIDE", "SLEEP",  "INVSTATE", nullptr,    nullptr,     "MEMORY",   "FORMAT",   "VERSION", "NOTFOUND",
+    "INDEX",  "DEBUG",  "INIT",   "USERDATA", "INIT_JIT", "PARAMS",    "DOMAIN",   "GENERAL",  "OVERLAY",
+  };
+  static const char* pawn_err_msgs[] = {
+    "invalid parameter count", // PAWN_ERR_PARAMCOUNT
+    "missing event handler",   // PAWN_ERR_MISSINGHANDLER
+  };
+
+  if (amx_err == AMX_ERR_EXIT) {
+    running = false;
+    return;
+  }
+
+  if (amx_err > 0 && amx_err < PAWN_ERR_FIRST && amx_err < sizeof(amx_err_msgs) / sizeof(*amx_err_msgs)) {
+    ShowError(amx_err_msgs[amx_err]);
+  } else if (amx_err >= PAWN_ERR_FIRST && amx_err - PAWN_ERR_FIRST < sizeof(pawn_err_msgs) / sizeof(*amx_err_msgs)) {
+    ShowError(pawn_err_msgs[amx_err - PAWN_ERR_FIRST]);
+  } else {
+    char msg[25];
+    snprintf(msg, sizeof(msg), "unknown error %d", amx_err);
+    ShowError(msg);
+  }
+}
+
+void Pawn::ShowError(const char* msg) {
+  CleanUI();
+
+  lv_obj_t* msglbl = lv_label_create(lv_scr_act(), nullptr);
+  lv_obj_set_style_local_text_color(msglbl, LV_LABEL_PART_MAIN, LV_STATE_DEFAULT, lv_color_make(255, 0, 0));
+  lv_label_set_long_mode(msglbl, LV_LABEL_LONG_BREAK);
+  lv_label_set_text_fmt(msglbl, "Execution aborted:\n%s\n\nCIP: 0x%X", msg, amx.cip);
+  lv_obj_set_width(msglbl, 240);
+  lv_label_set_align(msglbl, LV_LABEL_ALIGN_CENTER);
+  lv_obj_align(msglbl, NULL, LV_ALIGN_CENTER, 0, 0);
+}
+
+void Pawn::QueueError(unsigned int amx_err) {
+  if (this->queued_error != 0)
+    return;
+
+  this->queued_error = amx_err;
+  lv_async_call(
+    [](void* user_data) {
+      Pawn* pawn = static_cast<Pawn*>(user_data);
+      pawn->ShowError(pawn->queued_error);
+    },
+    this);
 }

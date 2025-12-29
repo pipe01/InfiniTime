@@ -21,6 +21,10 @@ namespace Pinetime {
 
         void Refresh() override;
 
+        void QueueError(unsigned int amx_err);
+        void ShowError(unsigned int amx_err);
+        void ShowError(const char* msg);
+
         Utility::DirtyValue<std::chrono::time_point<std::chrono::system_clock, std::chrono::minutes>> currentDateTime {};
         AppControllers& controllers;
 
@@ -30,10 +34,12 @@ namespace Pinetime {
         AMX amx;
         int refresh_index;
         lv_task_t* taskRefresh = 0;
+        unsigned int queued_error = 0;
 
         void *header = nullptr, *datablock = nullptr, *overlaypool = nullptr;
 
         int LoadProgram();
+        void CleanUI();
       };
     }
 
