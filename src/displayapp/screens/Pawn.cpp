@@ -1,5 +1,6 @@
 #include "Pawn.h"
 #include <stdio.h>
+#include <charconv>
 
 using namespace Pinetime::Applications::Screens;
 
@@ -81,7 +82,7 @@ static cell AMX_NATIVE_CALL F_lv_label_set_text(AMX* amx, const cell* params) {
   if (text != NULL)
     lv_label_set_text(label, text);
   else
-    lv_label_set_text(label, "<invalid>");
+    lv_label_set_text_static(label, "<invalid>");
 
   return 0;
 }
@@ -151,66 +152,154 @@ static cell AMX_NATIVE_CALL F_lv_obj_align(AMX* amx, const cell* params) {
   return 0;
 }
 
+static cell AMX_NATIVE_CALL F_lv_obj_realign(AMX* amx, const cell* params) {
+  ASSERT_PARAMS(1)
+  lv_obj_realign(PARAMS_OBJ(1));
+  return 0;
+}
+
+/**
+ * Hand-written implementation of sprintf with limited functionality in order to support reading strings from parameters.
+ * Supported interpolations:
+ *   %%
+ *   %d and %x, including padding flags
+ *   %s with packed strings
+ */
 static cell AMX_NATIVE_CALL F_sprintf(AMX* amx, const cell* params) {
-  // param[0] is the number of total parameter bytes, divide it by cell size and subtract 3 to account for the fixed parameters
-  int args_count = params[0] / sizeof(cell) - 3;
+  // param[0] is the number of total parameter bytes, divide it by cell size to get the parameter count
+  int args_count = params[0] / sizeof(cell);
+  if (args_count < 4) {
+    amx_RaiseError(amx, AMX_ERR_PARAMCOUNT);
+    return 0;
+  }
 
   cell* output = amx_Address(amx, params[1]);
-  cell output_size = params[2] * sizeof(cell); // We assume the output array is packed, TODO: add a separate sprintf_unpacked function?
+  cell max_size = params[2] * sizeof(cell); // We assume the output array is packed so each cell contains one character per byte
+  // TODO: add a separate sprintf_unpacked function?
 
-  char buf[output_size];
+  char buf[max_size];
+  char* bufc = buf;
+  char* bufmax = buf + max_size - 1;
 
   char* fmt;
   amx_StrParam_Type(amx, params[3], fmt, char*);
   if (fmt == NULL)
     return 0;
 
-  cell ret = 0;
+  size_t paramc = 4;
 
-#pragma GCC diagnostic ignored "-Wformat-nonliteral"
-  switch (args_count) {
-    case 0:
-      strcpy(buf, fmt);
-      ret = strlen(fmt) + 1;
-      break;
-    case 1:
-      ret = snprintf(buf, output_size, fmt, *amx_Address(amx, params[4]));
-      break;
-    case 2:
-      ret = snprintf(buf, output_size, fmt, *amx_Address(amx, params[4]), *amx_Address(amx, params[5]));
-      break;
-    case 3:
-      ret = snprintf(buf, output_size, fmt, *amx_Address(amx, params[4]), *amx_Address(amx, params[5]), *amx_Address(amx, params[6]));
-      break;
-    case 4:
-      ret = snprintf(buf,
-                     output_size,
-                     fmt,
-                     *amx_Address(amx, params[4]),
-                     *amx_Address(amx, params[5]),
-                     *amx_Address(amx, params[6]),
-                     *amx_Address(amx, params[7]));
-      break;
-    case 5:
-      ret = snprintf(buf,
-                     output_size,
-                     fmt,
-                     *amx_Address(amx, params[4]),
-                     *amx_Address(amx, params[5]),
-                     *amx_Address(amx, params[6]),
-                     *amx_Address(amx, params[7]),
-                     *amx_Address(amx, params[8]));
-      break;
-    default:
-      return 0;
+  size_t fmt_len = strlen(fmt);
+  bool in_pc = false;
+
+  char flags[4];
+  size_t flagc = 0;
+
+  for (size_t i = 0; i < fmt_len; i++) {
+    char c = fmt[i];
+
+    if (c == '%') {
+      if (in_pc) {
+        *bufc++ = '%';
+        in_pc = false;
+      } else {
+        flagc = 0;
+        in_pc = true;
+      }
+    } else if (in_pc) {
+      switch (c) {
+        case 'x':
+        case 'd': {
+          int padding = 0;
+          char pad = ' ';
+
+          if (flagc == 1) {
+            padding = flags[0] - '0';
+          } else if (flagc == 2) {
+            pad = flags[0];
+            padding = flags[1] - '0';
+          }
+
+          std::to_chars_result result = std::to_chars(bufc, bufmax, (int) *amx_Address(amx, params[paramc++]), c == 'x' ? 16 : 10);
+
+          int padlen = padding - (result.ptr - bufc);
+          for (int n = 0; n < padlen && bufc < bufmax; n++) {
+            bufc[1] = bufc[0];
+            bufc[0] = pad;
+            bufc++;
+          }
+
+          bufc = result.ptr + (padlen > 0 ? padlen : 0);
+          in_pc = false;
+          break;
+        }
+
+        case 's': {
+          cell param = params[paramc++];
+          int len;
+          amx_StrLen(amx_Address(amx, param), &len);
+
+          if (len > 0 && bufc + len < bufmax - 1) {
+            amx_GetString(bufc, amx_Address(amx, param), 0, len + 1);
+            bufc += len;
+          }
+          in_pc = false;
+          break;
+        }
+
+        default:
+          if (flagc < sizeof(flags))
+            flags[flagc++] = c;
+          break;
+      }
+    } else {
+      *bufc++ = c;
+    }
   }
-#pragma GCC diagnostic warning "-Wformat-nonliteral"
+  *bufc = 0;
 
-  amx_SetString(output, buf, 1, 0, output_size);
+  amx_SetString(output, buf, 1, 0, max_size);
 
-  return ret;
+  return bufc - buf;
 }
 
+static cell AMX_NATIVE_CALL F_get_datetime(AMX* amx, const cell* params) {
+  ASSERT_PARAMS(1);
+
+  Pawn* pawn = (Pawn*) amx->userdata[0];
+
+  pawn->currentDateTime = std::chrono::time_point_cast<std::chrono::minutes>(pawn->dateTimeController.CurrentDateTime());
+
+  cell* ret = amx_Address(amx, params[1]);
+
+  ret[0] = pawn->currentDateTime.IsUpdated();
+  ret[1] = pawn->dateTimeController.Seconds();
+  ret[2] = pawn->dateTimeController.Minutes();
+  ret[3] = pawn->dateTimeController.Hours();
+  ret[4] = pawn->dateTimeController.Day();
+  ret[5] = pawn->dateTimeController.Year();
+
+  return 0;
+}
+
+static cell AMX_NATIVE_CALL F_get_datetime_short_str(AMX* amx, const cell* params) {
+  ASSERT_PARAMS(2);
+
+  Pawn* pawn = (Pawn*) amx->userdata[0];
+
+  cell* ret_day = amx_Address(amx, params[1]);
+  cell* ret_month = amx_Address(amx, params[2]);
+
+  if (ret_day != NULL) {
+    const char* day = pawn->dateTimeController.DayOfWeekShortToString();
+    amx_SetString(ret_day, day, true, false, 4);
+  }
+  if (ret_month != NULL) {
+    const char* month = pawn->dateTimeController.MonthShortToString();
+    amx_SetString(ret_month, month, true, false, 4);
+  }
+
+  return 0;
+}
 
 static int load_program(AMX* amx, const uint8_t* data) {
   AMX_HEADER hdr;
@@ -236,9 +325,9 @@ static int load_program(AMX* amx, const uint8_t* data) {
   return result;
 }
 
-Pawn::Pawn(Controllers::DateTime& dateTimeController) : dateTimeController(dateTimeController) {
 #include "program.h"
 
+Pawn::Pawn(Controllers::DateTime& dateTimeController) : dateTimeController(dateTimeController) {
   load_program(&amx, program);
   (void) program_len;
 
@@ -252,6 +341,8 @@ Pawn::Pawn(Controllers::DateTime& dateTimeController) : dateTimeController(dateT
 
   const AMX_NATIVE_INFO natives[] = {
     {"sprintf", F_sprintf},
+    {"get_datetime", F_get_datetime},
+    {"get_datetime_short_str", F_get_datetime_short_str},
     {"lv_scr_act", F_lv_scr_act},
     {"lv_label_create", F_lv_label_create},
     {"lv_btn_create", F_lv_btn_create},
@@ -264,6 +355,7 @@ Pawn::Pawn(Controllers::DateTime& dateTimeController) : dateTimeController(dateT
     {"lv_obj_set_style_local_opa", F_lv_obj_set_style_local_opa},
     {"lv_obj_set_style_local_ptr", F_lv_obj_set_style_local_ptr},
     {"lv_obj_align", F_lv_obj_align},
+    {"lv_obj_realign", F_lv_obj_realign},
     {0, 0} /* terminator */
   };
   amx_Register(&amx, natives, -1);
