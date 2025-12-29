@@ -325,6 +325,25 @@ static int load_program(AMX* amx, const uint8_t* data) {
   return result;
 }
 
+extern "C" const AMX_NATIVE pawn_natives[] = {
+  F_sprintf,
+  F_lv_scr_act,
+  F_lv_label_create,
+  F_lv_btn_create,
+  F_lv_obj_set_pos,
+  F_lv_obj_set_size,
+  F_lv_obj_set_event_cb,
+  F_lv_obj_align,
+  F_lv_obj_realign,
+  F_lv_label_set_text,
+  F_lv_obj_set_style_local_int,
+  F_lv_obj_set_style_local_color,
+  F_lv_obj_set_style_local_opa,
+  F_lv_obj_set_style_local_ptr,
+  F_get_datetime,
+  F_get_datetime_short_str,
+};
+
 #include "program.h"
 
 Pawn::Pawn(Controllers::DateTime& dateTimeController) : dateTimeController(dateTimeController) {
@@ -338,27 +357,6 @@ Pawn::Pawn(Controllers::DateTime& dateTimeController) : dateTimeController(dateT
   cell* font;
   if (amx_FindPubVar(&amx, "font_jmec", &font) == AMX_ERR_NONE)
     *font = (cell) &jetbrains_mono_extrabold_compressed;
-
-  const AMX_NATIVE_INFO natives[] = {
-    {"sprintf", F_sprintf},
-    {"get_datetime", F_get_datetime},
-    {"get_datetime_short_str", F_get_datetime_short_str},
-    {"lv_scr_act", F_lv_scr_act},
-    {"lv_label_create", F_lv_label_create},
-    {"lv_btn_create", F_lv_btn_create},
-    {"lv_obj_set_pos", F_lv_obj_set_pos},
-    {"lv_obj_set_size", F_lv_obj_set_size},
-    {"lv_label_set_text", F_lv_label_set_text},
-    {"lv_obj_set_event_cb", F_lv_obj_set_event_cb},
-    {"lv_obj_set_style_local_int", F_lv_obj_set_style_local_int},
-    {"lv_obj_set_style_local_color", F_lv_obj_set_style_local_color},
-    {"lv_obj_set_style_local_opa", F_lv_obj_set_style_local_opa},
-    {"lv_obj_set_style_local_ptr", F_lv_obj_set_style_local_ptr},
-    {"lv_obj_align", F_lv_obj_align},
-    {"lv_obj_realign", F_lv_obj_realign},
-    {0, 0} /* terminator */
-  };
-  amx_Register(&amx, natives, -1);
 
   amx_Exec(&amx, NULL, AMX_EXEC_MAIN);
 

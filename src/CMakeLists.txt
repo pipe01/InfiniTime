@@ -912,6 +912,7 @@ target_include_directories(pawn SYSTEM PUBLIC ${INCLUDES_FROM_LIBS})
 target_compile_options(pawn PRIVATE
         ${COMMON_FLAGS}
         -DAMX_ANSIONLY
+        -DAMX_NATIVETABLE=pawn_natives
         $<$<CONFIG:DEBUG>: ${DEBUG_FLAGS}>
         $<$<CONFIG:RELEASE>: ${RELEASE_FLAGS}>
         $<$<COMPILE_LANGUAGE:CXX>: ${CXX_FLAGS}>
