@@ -22,6 +22,8 @@ using namespace Pinetime::Applications::Screens;
 
 #define PAWN_INST ((Pawn*) amx->userdata[0])
 
+constexpr int max_overlay_size = 512;
+
 static void event_handler(lv_obj_t* obj, lv_event_t event) {
   AMX* amx = (AMX*) lv_obj_get_user_data(lv_scr_act());
   int handler_index = (int) lv_obj_get_user_data(obj);
@@ -374,12 +376,12 @@ int Pawn::LoadProgram() {
 
     memcpy(datablock, program + hdr.dat, hdr.hea - hdr.dat);
 
-    constexpr int poolsize = 512;
-    overlaypool = malloc(poolsize + 8);
+    constexpr int overlaypool_overhead = 8;
+    overlaypool = malloc(max_overlay_size + overlaypool_overhead);
     if (overlaypool == NULL)
       return AMX_ERR_MEMORY;
 
-    amx_poolinit(overlaypool, poolsize + 8);
+    amx_poolinit(overlaypool, max_overlay_size + overlaypool_overhead);
 
     amx.data = (unsigned char*) datablock;
     amx.overlay = prun_Overlay;
