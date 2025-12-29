@@ -487,6 +487,12 @@ Pawn::Pawn(AppControllers& controllers) : controllers(controllers) {
     taskRefresh = lv_task_create(RefreshTaskCallback, LV_DISP_DEF_REFR_PERIOD, LV_TASK_PRIO_MID, this);
     Refresh();
   }
+  if (amx_FindPublic(&amx, "@touch", &touch_index) != AMX_ERR_NONE) {
+    touch_index = -1;
+  }
+  if (amx_FindPublic(&amx, "@gesture", &gesture_index) != AMX_ERR_NONE) {
+    gesture_index = -1;
+  }
 }
 
 void Pawn::CleanUI() {
@@ -573,4 +579,39 @@ void Pawn::QueueError(unsigned int amx_err) {
       pawn->ShowError(pawn->queued_error);
     },
     this);
+}
+
+bool Pawn::OnTouchEvent(TouchEvents event) {
+  if (gesture_index < 0)
+    return false;
+
+  cell ret;
+
+  amx_Push(&amx, (cell)event);
+
+  int result = amx_Exec(&amx, &ret, gesture_index);
+  if (result != AMX_ERR_NONE) {
+    ShowError(result);
+    return true;
+  }
+
+  return ret != 0;
+}
+
+bool Pawn::OnTouchEvent(uint16_t x, uint16_t y) {
+  if (touch_index < 0)
+    return false;
+
+  cell ret;
+
+  amx_Push(&amx, y);
+  amx_Push(&amx, x);
+
+  int result = amx_Exec(&amx, &ret, touch_index);
+  if (result != AMX_ERR_NONE) {
+    ShowError(result);
+    return true;
+  }
+
+  return ret != 0;
 }
