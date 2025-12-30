@@ -11,6 +11,7 @@ enum {
   PAWN_ERR_MISSINGHANDLER,
   PAWN_ERR_INVALIDSTRING,
   PAWN_ERR_INVALIDSETTING,
+  PAWN_ERR_INVALIDTRAMPOLINE,
 
   PAWN_ERR_FIRST = PAWN_ERR_PARAMCOUNT,
 };
@@ -50,12 +51,6 @@ static void event_handler(lv_obj_t* obj, lv_event_t event) {
   }
 }
 
-static cell AMX_NATIVE_CALL F_lv_scr_act(AMX* amx, const cell* params) {
-  ASSERT_PARAMS(0);
-
-  return (cell) lv_scr_act();
-}
-
 static cell AMX_NATIVE_CALL F_lv_label_create(AMX* amx, const cell* params) {
   ASSERT_PARAMS(3);
 
@@ -63,26 +58,6 @@ static cell AMX_NATIVE_CALL F_lv_label_create(AMX* amx, const cell* params) {
   label_set_text(amx, label, params[3]);
 
   return (cell) label;
-}
-
-static cell AMX_NATIVE_CALL F_lv_btn_create(AMX* amx, const cell* params) {
-  ASSERT_PARAMS(2);
-
-  return (cell) lv_btn_create(PARAMS_OBJ(1) ?: lv_scr_act(), PARAMS_OBJ(2));
-}
-
-static cell AMX_NATIVE_CALL F_lv_obj_set_pos(AMX* amx, const cell* params) {
-  ASSERT_PARAMS(3);
-
-  lv_obj_set_pos(PARAMS_OBJ(1), params[2], params[3]);
-  return 0;
-}
-
-static cell AMX_NATIVE_CALL F_lv_obj_set_size(AMX* amx, const cell* params) {
-  ASSERT_PARAMS(3);
-
-  lv_obj_set_size(PARAMS_OBJ(1), params[2], params[3]);
-  return 0;
 }
 
 static cell AMX_NATIVE_CALL F_lv_obj_set_event_cb(AMX* amx, const cell* params) {
@@ -161,25 +136,6 @@ static cell AMX_NATIVE_CALL F_lv_obj_set_style_local_ptr(AMX* amx, const cell* p
   cell state = params[5];
 
   _lv_obj_set_style_local_ptr(obj, part, prop | (state << LV_STYLE_STATE_POS), (void*) value);
-  return 0;
-}
-
-static cell AMX_NATIVE_CALL F_lv_obj_align(AMX* amx, const cell* params) {
-  ASSERT_PARAMS(5)
-
-  lv_obj_t* obj = PARAMS_OBJ(1);
-  lv_obj_t* base = PARAMS_OBJ(2);
-  cell align = params[3];
-  cell x_ofs = params[4];
-  cell y_ofs = params[5];
-
-  lv_obj_align(obj, base, align, x_ofs, y_ofs);
-  return 0;
-}
-
-static cell AMX_NATIVE_CALL F_lv_obj_realign(AMX* amx, const cell* params) {
-  ASSERT_PARAMS(1)
-  lv_obj_realign(PARAMS_OBJ(1));
   return 0;
 }
 
@@ -401,6 +357,99 @@ static cell AMX_NATIVE_CALL F_raise_error(AMX* amx, const cell* params) {
   return 0;
 }
 
+static const uintptr_t natives[] = { // Indices start at -1000
+  (uintptr_t) lv_label_create,
+  (uintptr_t) lv_btn_create,
+  (uintptr_t) lv_obj_set_pos,
+  (uintptr_t) lv_obj_set_size,
+  (uintptr_t) lv_obj_align,
+  (uintptr_t) lv_obj_realign,
+};
+
+static const AMX_NATIVE lvgl_proxys[] = { // Indices start at -3000
+  F_lv_label_create,
+  F_lv_obj_set_event_cb,
+  F_lv_label_set_text,
+  F_lv_obj_set_style_local_int,
+  F_lv_obj_set_style_local_color,
+  F_lv_obj_set_style_local_opa,
+  F_lv_obj_set_style_local_ptr,
+};
+
+static const AMX_NATIVE pawn_proxys[] = { // Indices start at -2000
+  F_sprintf,
+  F_read_datetime,
+  F_read_datetime_short_str,
+  F_status_icons_create,
+  F_status_icons_update,
+  F_has_new_notifications,
+  F_get_setting,
+  F_get_heartrate,
+  F_get_heartrate_state,
+  F_get_step_number,
+  F_raise_error,
+};
+
+static cell trampoline(unsigned int index, const cell* params) {
+  int param_count = params[0] / sizeof(cell);
+
+  if (index >= sizeof(natives) / sizeof(natives[0]))
+    return PAWN_ERR_INVALIDTRAMPOLINE;
+
+  uintptr_t addr = natives[index] | 1; // Set lowest bit to enable thumb mode (always must be enabled on ARMv7-M)
+
+  cell ret;
+
+  params++; // Skip parameter count
+
+  asm volatile(".syntax unified\n"
+               ".thumb\n"
+
+               // Save stack pointer in case we push excess arguments into stack
+               "mov r5, sp\n"
+
+               // Load first argument into R0 or jump out
+               "subs %[count], #1\n"
+               "bmi call\n"
+               "ldr r0, [%[params]]\n"
+               "add %[params], #4\n"
+
+               // Load second argument into R1 or jump out
+               "subs %[count], #1\n"
+               "bmi call\n"
+               "ldr r1, [%[params]]\n"
+               "add %[params], #4\n"
+
+               // Load third argument into R2 or jump out
+               "subs %[count], #1\n"
+               "bmi call\n"
+               "ldr r2, [%[params]]\n"
+               "add %[params], #4\n"
+
+               // Load fourth argument into R3 or jump out
+               "subs %[count], #1\n"
+               "bmi call\n"
+               "ldr r3, [%[params]]\n"
+               "add %[params], #4\n"
+
+               // Push remaining argument into stack in reverse order
+               "loop: subs %[count], #1\n"
+               "      bmi call\n"
+               "      ldr r12, [%[params], +%[count], LSL 2]\n"
+               "      push {r12}\n"
+               "      b loop\n"
+
+               "call: blx %[addr]\n"    // Call function
+               "      mov sp, r5\n"     // Restore stack
+               "      mov %[ret], r0\n" // Move returned value into ret
+
+               : [ret] "=r"(ret), [count] "+r"(param_count), [params] "+r"(params)
+               : [addr] "r"(addr)
+               : "r0", "r1", "r2", "r3", "r5", "r12", "lr", "memory");
+
+  return ret;
+}
+
 static int AMXAPI prun_Overlay(AMX* amx, int index) {
   AMX_HEADER* hdr;
   AMX_OVERLAYINFO* tbl;
@@ -419,6 +468,20 @@ static int AMXAPI prun_Overlay(AMX* amx, int index) {
   }
 
   return AMX_ERR_NONE;
+}
+
+static int AMXAPI prun_Callback(struct tagAMX* amx, cell index, cell* result, const cell* params) {
+  amx->error = AMX_ERR_NONE;
+
+  if (index <= -3000) { // LVGL proxys
+    *result = lvgl_proxys[-(index + 3000)](amx, params);
+  } else if (index <= -2000) { // InfiniTime proxys
+    *result = pawn_proxys[-(index + 2000)](amx, params);
+  } else { // Direct trampolines
+    *result = trampoline(-(index + 1000), params);
+  }
+
+  return amx->error;
 }
 
 int Pawn::LoadProgram() {
@@ -483,33 +546,6 @@ int Pawn::LoadProgram() {
   return result;
 }
 
-extern "C" const AMX_NATIVE pawn_natives[] = {
-  F_sprintf,
-  F_lv_scr_act,
-  F_lv_label_create,
-  F_lv_btn_create,
-  F_lv_obj_set_pos,
-  F_lv_obj_set_size,
-  F_lv_obj_set_event_cb,
-  F_lv_obj_align,
-  F_lv_obj_realign,
-  F_lv_label_set_text,
-  F_lv_obj_set_style_local_int,
-  F_lv_obj_set_style_local_color,
-  F_lv_obj_set_style_local_opa,
-  F_lv_obj_set_style_local_ptr,
-  F_read_datetime,
-  F_read_datetime_short_str,
-  F_status_icons_create,
-  F_status_icons_update,
-  F_has_new_notifications,
-  F_get_setting,
-  F_get_heartrate,
-  F_get_heartrate_state,
-  F_get_step_number,
-  F_raise_error,
-};
-
 #include "program.h"
 
 Pawn::Pawn(AppControllers& controllers) : Pawn(program, controllers) {
@@ -525,9 +561,13 @@ Pawn::Pawn(const uint8_t* file, AppControllers& controllers) : controllers(contr
 
   lv_obj_set_user_data(lv_scr_act(), &amx);
 
-  cell* font;
-  if (amx_FindPubVar(&amx, "font_jmec", &font) == AMX_ERR_NONE)
-    *font = (cell) &jetbrains_mono_extrabold_compressed;
+  amx_SetCallback(&amx, prun_Callback);
+
+  cell* var;
+  if (amx_FindPubVar(&amx, "font_jmec", &var) == AMX_ERR_NONE)
+    *var = (cell) &jetbrains_mono_extrabold_compressed;
+  if (amx_FindPubVar(&amx, "screen", &var) == AMX_ERR_NONE)
+    *var = (cell) lv_scr_act();
 
   result = amx_Exec(&amx, NULL, AMX_EXEC_MAIN);
   if (result != AMX_ERR_NONE) {

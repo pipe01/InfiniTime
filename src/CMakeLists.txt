@@ -916,7 +916,6 @@ target_compile_options(pawn PRIVATE
         -DAMX_ANSIONLY
         -DAMX_NODYNALOAD
         -DAMX_DONT_RELOCATE
-        -DAMX_NATIVETABLE=pawn_natives
         $<$<CONFIG:DEBUG>: ${DEBUG_FLAGS}>
         $<$<CONFIG:RELEASE>: ${RELEASE_FLAGS}>
         $<$<COMPILE_LANGUAGE:CXX>: ${CXX_FLAGS}>

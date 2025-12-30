@@ -180,17 +180,18 @@ const lv_style_prop: {
     LV_STYLE_PROP_INIT(LV_STYLE_SCALE_END_COLOR,        0xC, LV_STYLE_ID_COLOR + 1, LV_STYLE_ATTR_NONE),
 };
 
-native lv_obj: lv_scr_act()                                                                     = -2
-native lv_obj: lv_label_create(lv_obj:par = lv_obj:0, lv_obj:copy = lv_obj:0, const text{} = 0) = -3
-native lv_obj: lv_btn_create  (lv_obj:par = lv_obj:0, lv_obj:copy = lv_obj:0)                   = -4
-native lv_obj_set_pos(lv_obj:obj, x, y)                                                         = -5
-native lv_obj_set_size(lv_obj:obj, w, h)                                                        = -6
-native lv_obj_set_event_cb(lv_obj:obj, const cb_name[])                                         = -7
-native lv_obj_align(lv_obj:obj, lv_obj:base = lv_obj:0, lv_align:align, x_ofs = 0, y_ofs = 0)   = -8
-native lv_obj_realign(lv_obj:obj)                                                               = -9
-native lv_label_set_text(lv_obj:obj, const text[])                                              = -10
+public stock const lv_obj: screen
 
-native lv_obj_set_style_local_int  (lv_obj:obj, lv_style_prop:prop, value, part = 0, lv_state:state_=LV_STATE_DEFAULT)      = -11
-native lv_obj_set_style_local_color(lv_obj:obj, lv_style_prop:prop, value, part = 0, lv_state:state_=LV_STATE_DEFAULT)      = -12
-native lv_obj_set_style_local_opa  (lv_obj:obj, lv_style_prop:prop, value, part = 0, lv_state:state_=LV_STATE_DEFAULT)      = -13
-native lv_obj_set_style_local_ptr  (lv_obj:obj, lv_style_prop:prop, ptr:value, part = 0, lv_state:state_=LV_STATE_DEFAULT)  = -14
+native lv_obj: lv_label_create(lv_obj:par, lv_obj:copy = lv_obj:0, const text{} = 0)            = -3000
+native lv_obj: lv_btn_create  (lv_obj:par, lv_obj:copy = lv_obj:0)                              = -1001
+native lv_obj_set_pos(lv_obj:obj, x, y)                                                         = -1002
+native lv_obj_set_size(lv_obj:obj, w, h)                                                        = -1003
+native lv_obj_set_event_cb(lv_obj:obj, const cb_name[])                                         = -3001
+native lv_obj_align(lv_obj:obj, lv_obj:base = lv_obj:0, lv_align:align, x_ofs = 0, y_ofs = 0)   = -1004
+native lv_obj_realign(lv_obj:obj)                                                               = -1005
+native lv_label_set_text(lv_obj:obj, const text[])                                              = -3002
+
+native lv_obj_set_style_local_int  (lv_obj:obj, lv_style_prop:prop, value, part = 0, lv_state:state_=LV_STATE_DEFAULT)      = -3003
+native lv_obj_set_style_local_color(lv_obj:obj, lv_style_prop:prop, value, part = 0, lv_state:state_=LV_STATE_DEFAULT)      = -3004
+native lv_obj_set_style_local_opa  (lv_obj:obj, lv_style_prop:prop, value, part = 0, lv_state:state_=LV_STATE_DEFAULT)      = -3005
+native lv_obj_set_style_local_ptr  (lv_obj:obj, lv_style_prop:prop, ptr:value, part = 0, lv_state:state_=LV_STATE_DEFAULT)  = -3006

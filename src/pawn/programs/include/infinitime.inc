@@ -4,7 +4,7 @@
 
 #define DATETIME[.minute, .hour, .day, .year]
 
-native sprintf(out[], size=sizeof out, const fmt[], const ...) = -1
+native sprintf(out[], size=sizeof out, const fmt[], const ...) = -2000
 
 #define jetbrains_mono_extrabold_compressed font_jmec // Name truncated because symbols have a max length of 31 characters
 public stock const ptr:jetbrains_mono_extrabold_compressed
@@ -20,12 +20,12 @@ const touch_event: {
     TOUCH_DOUBLE_TAP,
 }
 
-native bool: read_datetime(out[DATETIME])                                = -15
-native read_datetime_short_str(day_of_week{4} = 0, month_of_year{4} = 0) = -16
+native bool: read_datetime(out[DATETIME])                                = -2001
+native read_datetime_short_str(day_of_week{4} = 0, month_of_year{4} = 0) = -2002
 
-native status_icons_create() = -17
-native status_icons_update() = -18
-native bool: has_new_notifications() = -19
+native status_icons_create() = -2003
+native status_icons_update() = -2004
+native bool: has_new_notifications() = -2005
 
 const setting: {
     SETTING_WATCHFACE = 0,
@@ -40,7 +40,7 @@ const {
     CLOCK_TYPE_H24 = 0,
     CLOCK_TYPE_H12
 }
-native get_setting(setting: s) = -20
+native get_setting(setting: s) = -2006
 
 const heartrate_state: {
     HEARTRATE_STOPPED = 0,
@@ -48,12 +48,12 @@ const heartrate_state: {
     HEARTRATE_NO_TOUCH
     HEARTRATE_RUNNING
 }
-native get_heartrate() = -21
-native heartrate_state: get_heartrate_state() = -22
+native get_heartrate() = -2007
+native heartrate_state: get_heartrate_state() = -2008
 
-native get_step_number() = -23
+native get_step_number() = -2009
 
-native raise_error(err) = -24
+native raise_error(err) = -2010
 
 forward @refresh()
 forward @touch(x, y)
