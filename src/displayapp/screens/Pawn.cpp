@@ -357,7 +357,8 @@ static cell AMX_NATIVE_CALL F_raise_error(AMX* amx, const cell* params) {
   return 0;
 }
 
-static const uintptr_t natives[] = { // Indices start at -1000
+static const uintptr_t natives[] = {
+  // Indices start at -1000
   (uintptr_t) lv_label_create,
   (uintptr_t) lv_btn_create,
   (uintptr_t) lv_obj_set_pos,
@@ -366,7 +367,8 @@ static const uintptr_t natives[] = { // Indices start at -1000
   (uintptr_t) lv_obj_realign,
 };
 
-static const AMX_NATIVE lvgl_proxys[] = { // Indices start at -3000
+static const AMX_NATIVE lvgl_proxys[] = {
+  // Indices start at -3000
   F_lv_label_create,
   F_lv_obj_set_event_cb,
   F_lv_label_set_text,
@@ -376,7 +378,8 @@ static const AMX_NATIVE lvgl_proxys[] = { // Indices start at -3000
   F_lv_obj_set_style_local_ptr,
 };
 
-static const AMX_NATIVE pawn_proxys[] = { // Indices start at -2000
+static const AMX_NATIVE pawn_proxys[] = {
+  // Indices start at -2000
   F_sprintf,
   F_read_datetime,
   F_read_datetime_short_str,
@@ -501,13 +504,14 @@ int Pawn::LoadProgram() {
 
   memcpy(header, file, hdr.cod);
 
+  datablock = malloc(hdr.stp - hdr.dat); // This block contains data, heap and stack
+  if (datablock == NULL)
+    return AMX_ERR_MEMORY;
+
+  memcpy(datablock, file + hdr.dat, hdr.hea - hdr.dat);
+  amx.data = (unsigned char*) datablock;
+
   if (hdr.flags & AMX_FLAG_OVERLAY) {
-    datablock = malloc(hdr.stp - hdr.dat); // This block contains data, heap and stack
-    if (datablock == NULL)
-      return AMX_ERR_MEMORY;
-
-    memcpy(datablock, file + hdr.dat, hdr.hea - hdr.dat);
-
     constexpr int overlaypool_overhead = 8;
     overlaypool = malloc(max_overlay_size + overlaypool_overhead);
     if (overlaypool == NULL)
@@ -515,7 +519,6 @@ int Pawn::LoadProgram() {
 
     amx_poolinit(&amx_pool, overlaypool, max_overlay_size + overlaypool_overhead);
 
-    amx.data = (unsigned char*) datablock;
     amx.overlay = prun_Overlay;
 
     result = amx_Init(&amx, header);
@@ -528,13 +531,9 @@ int Pawn::LoadProgram() {
       overlaypool = NULL;
     }
   } else {
-    datablock = malloc(hdr.stp); // This block contains code, data, heap and stack
-    if (datablock == NULL)
-      return AMX_ERR_MEMORY;
+    amx.flags |= AMX_FLAG_DSEG_INIT;
 
-    memcpy(datablock, file, hdr.size);
-
-    result = amx_Init(&amx, datablock);
+    result = amx_Init(&amx, (void*) file);
     if (result != AMX_ERR_NONE) {
       free(header);
       header = NULL;

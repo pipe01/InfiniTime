@@ -916,6 +916,31 @@ target_compile_options(pawn PRIVATE
         -DAMX_ANSIONLY
         -DAMX_NODYNALOAD
         -DAMX_DONT_RELOCATE
+
+        # -DAMX_ALIGN
+        # -DAMX_ALLOT
+        # -DAMX_DEFCALLBACK
+        -DAMX_CLEANUP
+        # -DAMX_CLONE
+        -DAMX_EXEC
+        # -DAMX_FLAGS
+        -DAMX_INIT
+        # -DAMX_MEMINFO
+        # -DAMX_NAMELENGTH
+        # -DAMX_NATIVEINFO
+        -DAMX_PUSHXXX
+        -DAMX_RAISEERROR
+        # -DAMX_REGISTER
+        -DAMX_SETCALLBACK
+        # -DAMX_SETDEBUGHOOK
+        # -DAMX_UTF8XXX
+        # -DAMX_XXXNATIVES
+        -DAMX_XXXPUBLICS
+        -DAMX_XXXPUBVARS
+        -DAMX_XXXSTRING
+        # -DAMX_XXXTAGS
+        # -DAMX_XXXUSERDATA
+        # -DAMX_VERIFYADDR
         $<$<CONFIG:DEBUG>: ${DEBUG_FLAGS}>
         $<$<CONFIG:RELEASE>: ${RELEASE_FLAGS}>
         $<$<COMPILE_LANGUAGE:CXX>: ${CXX_FLAGS}>
