@@ -9,6 +9,7 @@
 #include <chrono>
 
 #include "pawn/amx.h"
+#include "pawn/amxpool.h"
 
 namespace Pinetime {
   namespace Applications {
@@ -33,8 +34,11 @@ namespace Pinetime {
 
         Widgets::StatusIcons* statusIcons = nullptr;
 
+        amxPool amx_pool;
+
       private:
         AMX amx;
+
         int refresh_index, touch_index, gesture_index;
         lv_task_t* taskRefresh = 0;
         unsigned int queued_error = 0;

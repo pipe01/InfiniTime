@@ -20,11 +20,24 @@
 #ifndef AMXPOOL_H_INCLUDED
 #define AMXPOOL_H_INCLUDED
 
-void  amx_poolinit(void *pool, unsigned size);
-void *amx_poolalloc(unsigned size, int index);
-void  amx_poolfree(void *block);
-void *amx_poolfind(int index);
-int   amx_poolprotect(int index);
+#if defined(__cplusplus)
+extern "C" {
+#endif
 
+typedef struct amxPool {
+  void *base;
+  unsigned size;
+  unsigned short lru;
+} amxPool;
+
+void  amx_poolinit(amxPool *pool, void *buffer, unsigned size);
+void *amx_poolalloc(amxPool *pool, unsigned size, int index);
+void  amx_poolfree(amxPool *pool, void *block);
+void *amx_poolfind(amxPool *pool, int index);
+int   amx_poolprotect(amxPool *pool, int index);
+
+#if defined(__cplusplus)
+}
+#endif
 
 #endif /* AMXPOOL_H_INCLUDED */

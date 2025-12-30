@@ -365,10 +365,10 @@ static int AMXAPI prun_Overlay(AMX* amx, int index) {
   tbl = (AMX_OVERLAYINFO*) (amx->base + hdr->overlays) + index;
 
   amx->codesize = tbl->size;
-  amx->code = (unsigned char*) amx_poolfind(index);
+  amx->code = (unsigned char*) amx_poolfind(&PAWN_INST->amx_pool, index);
 
   if (amx->code == NULL) {
-    if ((amx->code = (unsigned char*) amx_poolalloc(tbl->size, index)) == NULL)
+    if ((amx->code = (unsigned char*) amx_poolalloc(&PAWN_INST->amx_pool, tbl->size, index)) == NULL)
       return AMX_ERR_OVERLAY;
 
     memcpy(amx->code, program + hdr->cod + tbl->offset, tbl->size);
@@ -388,6 +388,7 @@ int Pawn::LoadProgram() {
     return AMX_ERR_FORMAT;
 
   memset(&amx, 0, sizeof(amx));
+  amx.userdata[0] = this;
 
   header = malloc(hdr.cod);
   if (header == NULL)
@@ -407,7 +408,7 @@ int Pawn::LoadProgram() {
     if (overlaypool == NULL)
       return AMX_ERR_MEMORY;
 
-    amx_poolinit(overlaypool, max_overlay_size + overlaypool_overhead);
+    amx_poolinit(&amx_pool, overlaypool, max_overlay_size + overlaypool_overhead);
 
     amx.data = (unsigned char*) datablock;
     amx.overlay = prun_Overlay;
@@ -468,8 +469,6 @@ Pawn::Pawn(AppControllers& controllers) : controllers(controllers) {
     ShowError(result);
     return;
   }
-
-  amx.userdata[0] = this;
 
   lv_obj_set_user_data(lv_scr_act(), &amx);
 
