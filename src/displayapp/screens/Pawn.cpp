@@ -2,12 +2,15 @@
 #include <stdio.h>
 #include <charconv>
 
+#include "components/heartrate/HeartRateController.h"
+
 using namespace Pinetime::Applications::Screens;
 
 enum {
   PAWN_ERR_PARAMCOUNT = 100,
   PAWN_ERR_MISSINGHANDLER,
   PAWN_ERR_INVALIDSTRING,
+  PAWN_ERR_INVALIDSETTING,
 
   PAWN_ERR_FIRST = PAWN_ERR_PARAMCOUNT,
 };
@@ -23,6 +26,15 @@ enum {
 #define PAWN_INST ((Pawn*) amx->userdata[0])
 
 constexpr int max_overlay_size = 512;
+
+static void label_set_text(AMX* amx, lv_obj_t* label, cell str) {
+  char* text;
+  amx_StrParam_Type(amx, str, text, char*);
+  if (text != NULL)
+    lv_label_set_text(label, text);
+  else
+    lv_label_set_text_static(label, "");
+}
 
 static void event_handler(lv_obj_t* obj, lv_event_t event) {
   if (event == LV_EVENT_DELETE)
@@ -45,9 +57,12 @@ static cell AMX_NATIVE_CALL F_lv_scr_act(AMX* amx, const cell* params) {
 }
 
 static cell AMX_NATIVE_CALL F_lv_label_create(AMX* amx, const cell* params) {
-  ASSERT_PARAMS(2);
+  ASSERT_PARAMS(3);
 
-  return (cell) lv_label_create(PARAMS_OBJ(1) ?: lv_scr_act(), PARAMS_OBJ(2));
+  lv_obj_t* label = lv_label_create(PARAMS_OBJ(1) ?: lv_scr_act(), PARAMS_OBJ(2));
+  label_set_text(amx, label, params[3]);
+
+  return (cell) label;
 }
 
 static cell AMX_NATIVE_CALL F_lv_btn_create(AMX* amx, const cell* params) {
@@ -93,15 +108,7 @@ static cell AMX_NATIVE_CALL F_lv_obj_set_event_cb(AMX* amx, const cell* params) 
 static cell AMX_NATIVE_CALL F_lv_label_set_text(AMX* amx, const cell* params) {
   ASSERT_PARAMS(2);
 
-  lv_obj_t* label = PARAMS_OBJ(1);
-
-  char* text;
-  amx_StrParam_Type(amx, params[2], text, char*);
-  if (text != NULL)
-    lv_label_set_text(label, text);
-  else
-    amx_RaiseError(amx, PAWN_ERR_INVALIDSTRING);
-
+  label_set_text(amx, PARAMS_OBJ(1), params[2]);
   return 0;
 }
 
@@ -282,7 +289,7 @@ static cell AMX_NATIVE_CALL F_sprintf(AMX* amx, const cell* params) {
   return bufc - buf;
 }
 
-cell AMX_NATIVE_CALL F_get_datetime(AMX* amx, const cell* params) {
+cell AMX_NATIVE_CALL F_read_datetime(AMX* amx, const cell* params) {
   ASSERT_PARAMS(1);
 
   Pawn* pawn = PAWN_INST;
@@ -290,18 +297,21 @@ cell AMX_NATIVE_CALL F_get_datetime(AMX* amx, const cell* params) {
   pawn->currentDateTime = std::chrono::time_point_cast<std::chrono::minutes>(pawn->controllers.dateTimeController.CurrentDateTime());
 
   cell* ret = amx_Address(amx, params[1]);
+  cell data[] = {
+    pawn->controllers.dateTimeController.Minutes(),
+    pawn->controllers.dateTimeController.Hours(),
+    pawn->controllers.dateTimeController.Day(),
+    pawn->controllers.dateTimeController.Year(),
+  };
 
-  ret[0] = pawn->currentDateTime.IsUpdated();
-  ret[1] = pawn->controllers.dateTimeController.Seconds();
-  ret[2] = pawn->controllers.dateTimeController.Minutes();
-  ret[3] = pawn->controllers.dateTimeController.Hours();
-  ret[4] = pawn->controllers.dateTimeController.Day();
-  ret[5] = pawn->controllers.dateTimeController.Year();
-
-  return 0;
+  if (memcmp(ret, data, sizeof(data)) == 0) {
+    return 0;
+  }
+  memcpy(ret, data, sizeof(data));
+  return 1;
 }
 
-static cell AMX_NATIVE_CALL F_get_datetime_short_str(AMX* amx, const cell* params) {
+static cell AMX_NATIVE_CALL F_read_datetime_short_str(AMX* amx, const cell* params) {
   ASSERT_PARAMS(2);
 
   Pawn* pawn = PAWN_INST;
@@ -341,6 +351,46 @@ static cell AMX_NATIVE_CALL F_status_icons_update(AMX* amx, const cell*) {
     pawn->statusIcons->Update();
 
   return 0;
+}
+
+static cell AMX_NATIVE_CALL F_has_new_notifications(AMX* amx, const cell*) {
+  return PAWN_INST->controllers.notificationManager.AreNewNotificationsAvailable();
+}
+
+static cell AMX_NATIVE_CALL F_get_setting(AMX* amx, const cell* params) {
+  ASSERT_PARAMS(1);
+
+#define SETTING(n, m)                                                                                                                      \
+  case n:                                                                                                                                  \
+    return (cell) PAWN_INST->controllers.settingsController.m();
+
+  switch (params[1]) {
+    SETTING(0, GetWatchFace)
+    SETTING(1, GetChimeOption)
+    SETTING(2, GetPrideFlag)
+    SETTING(3, GetClockType)
+    SETTING(4, GetWeatherFormat)
+    SETTING(5, GetNotificationStatus)
+    SETTING(6, GetStepsGoal)
+
+    default:
+      amx_RaiseError(amx, PAWN_ERR_INVALIDSETTING);
+      return 0;
+  }
+
+#undef SETTING
+}
+
+static cell AMX_NATIVE_CALL F_get_heartrate(AMX* amx, const cell*) {
+  return PAWN_INST->controllers.heartRateController.HeartRate();
+}
+
+static cell AMX_NATIVE_CALL F_get_heartrate_state(AMX* amx, const cell*) {
+  return (cell) PAWN_INST->controllers.heartRateController.State();
+}
+
+static cell AMX_NATIVE_CALL F_get_step_number(AMX* amx, const cell*) {
+  return PAWN_INST->controllers.motionController.NbSteps();
 }
 
 static cell AMX_NATIVE_CALL F_raise_error(AMX* amx, const cell* params) {
@@ -448,19 +498,25 @@ extern "C" const AMX_NATIVE pawn_natives[] = {
   F_lv_obj_set_style_local_color,
   F_lv_obj_set_style_local_opa,
   F_lv_obj_set_style_local_ptr,
-  F_get_datetime,
-  F_get_datetime_short_str,
+  F_read_datetime,
+  F_read_datetime_short_str,
   F_status_icons_create,
   F_status_icons_update,
+  F_has_new_notifications,
+  F_get_setting,
+  F_get_heartrate,
+  F_get_heartrate_state,
+  F_get_step_number,
   F_raise_error,
 };
 
 #include "program.h"
+
 Pawn::Pawn(AppControllers& controllers) : Pawn(program, controllers) {
   (void) program_len;
 }
 
-Pawn::Pawn(const uint8_t *file, AppControllers& controllers) : controllers(controllers), file(file) {
+Pawn::Pawn(const uint8_t* file, AppControllers& controllers) : controllers(controllers), file(file) {
   int result = LoadProgram();
   if (result != AMX_ERR_NONE) {
     ShowError(result);
@@ -532,8 +588,10 @@ void Pawn::ShowError(unsigned int amx_err) {
     "INDEX",  "DEBUG",  "INIT",   "USERDATA", "INIT_JIT", "PARAMS",    "DOMAIN",   "GENERAL",  "OVERLAY",
   };
   static const char* pawn_err_msgs[] = {
-    "invalid parameter count", // PAWN_ERR_PARAMCOUNT
-    "missing event handler",   // PAWN_ERR_MISSINGHANDLER
+    "parameter count mismatch", // PAWN_ERR_PARAMCOUNT
+    "missing event handler",    // PAWN_ERR_MISSINGHANDLER
+    "invalid string",           // PAWN_ERR_INVALIDSTRING
+    "invalid setting",          // PAWN_ERR_INVALIDSETTING
   };
 
   if (amx_err == AMX_ERR_EXIT) {
@@ -583,7 +641,7 @@ bool Pawn::OnTouchEvent(TouchEvents event) {
 
   cell ret;
 
-  amx_Push(&amx, (cell)event);
+  amx_Push(&amx, (cell) event);
 
   int result = amx_Exec(&amx, &ret, gesture_index);
   if (result != AMX_ERR_NONE) {
