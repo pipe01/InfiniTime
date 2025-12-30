@@ -18,6 +18,7 @@ namespace Pinetime {
       class Pawn : public Screen {
       public:
         Pawn(AppControllers& controllers);
+        Pawn(const uint8_t *file, AppControllers& controllers);
         ~Pawn() override;
 
         void Refresh() override;
@@ -35,6 +36,7 @@ namespace Pinetime {
         Widgets::StatusIcons* statusIcons = nullptr;
 
         amxPool amx_pool;
+        const uint8_t *file;
 
       private:
         AMX amx;
@@ -56,7 +58,6 @@ namespace Pinetime {
       static constexpr const char* icon = "P";
 
       static Screens::Screen* Create(AppControllers& controllers) {
-        // sizeof(Pawn)
         return new Screens::Pawn(controllers);
       };
 

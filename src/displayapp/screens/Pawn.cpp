@@ -2,12 +2,6 @@
 #include <stdio.h>
 #include <charconv>
 
-extern "C" {
-#include "pawn/amxpool.h"
-}
-
-#include "program.h"
-
 using namespace Pinetime::Applications::Screens;
 
 enum {
@@ -288,7 +282,7 @@ static cell AMX_NATIVE_CALL F_sprintf(AMX* amx, const cell* params) {
   return bufc - buf;
 }
 
-static cell AMX_NATIVE_CALL F_get_datetime(AMX* amx, const cell* params) {
+cell AMX_NATIVE_CALL F_get_datetime(AMX* amx, const cell* params) {
   ASSERT_PARAMS(1);
 
   Pawn* pawn = PAWN_INST;
@@ -371,18 +365,16 @@ static int AMXAPI prun_Overlay(AMX* amx, int index) {
     if ((amx->code = (unsigned char*) amx_poolalloc(&PAWN_INST->amx_pool, tbl->size, index)) == NULL)
       return AMX_ERR_OVERLAY;
 
-    memcpy(amx->code, program + hdr->cod + tbl->offset, tbl->size);
+    memcpy(amx->code, PAWN_INST->file + hdr->cod + tbl->offset, tbl->size);
   }
 
   return AMX_ERR_NONE;
 }
 
 int Pawn::LoadProgram() {
-  (void) program_len;
-
   int result;
   AMX_HEADER hdr;
-  memcpy(&hdr, program, sizeof(hdr));
+  memcpy(&hdr, file, sizeof(hdr));
 
   if (hdr.magic != AMX_MAGIC)
     return AMX_ERR_FORMAT;
@@ -394,14 +386,14 @@ int Pawn::LoadProgram() {
   if (header == NULL)
     return AMX_ERR_MEMORY;
 
-  memcpy(header, program, hdr.cod);
+  memcpy(header, file, hdr.cod);
 
   if (hdr.flags & AMX_FLAG_OVERLAY) {
     datablock = malloc(hdr.stp - hdr.dat); // This block contains data, heap and stack
     if (datablock == NULL)
       return AMX_ERR_MEMORY;
 
-    memcpy(datablock, program + hdr.dat, hdr.hea - hdr.dat);
+    memcpy(datablock, file + hdr.dat, hdr.hea - hdr.dat);
 
     constexpr int overlaypool_overhead = 8;
     overlaypool = malloc(max_overlay_size + overlaypool_overhead);
@@ -427,7 +419,7 @@ int Pawn::LoadProgram() {
     if (datablock == NULL)
       return AMX_ERR_MEMORY;
 
-    memcpy(datablock, program, hdr.size);
+    memcpy(datablock, file, hdr.size);
 
     result = amx_Init(&amx, datablock);
     if (result != AMX_ERR_NONE) {
@@ -463,7 +455,12 @@ extern "C" const AMX_NATIVE pawn_natives[] = {
   F_raise_error,
 };
 
-Pawn::Pawn(AppControllers& controllers) : controllers(controllers) {
+#include "program.h"
+Pawn::Pawn(AppControllers& controllers) : Pawn(program, controllers) {
+  (void) program_len;
+}
+
+Pawn::Pawn(const uint8_t *file, AppControllers& controllers) : controllers(controllers), file(file) {
   int result = LoadProgram();
   if (result != AMX_ERR_NONE) {
     ShowError(result);
