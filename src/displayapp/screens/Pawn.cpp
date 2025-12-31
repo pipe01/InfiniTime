@@ -6,12 +6,15 @@
 
 using namespace Pinetime::Applications::Screens;
 
+#define LOG_PREFIX "[Pawn] "
+
 enum {
   PAWN_ERR_PARAMCOUNT = 100,
   PAWN_ERR_MISSINGHANDLER,
   PAWN_ERR_INVALIDSTRING,
   PAWN_ERR_INVALIDSETTING,
   PAWN_ERR_INVALIDTRAMPOLINE,
+  PAWN_ERR_FILE,
 
   PAWN_ERR_FIRST = PAWN_ERR_PARAMCOUNT,
 };
@@ -26,7 +29,7 @@ enum {
 
 #define PAWN_INST ((Pawn*) amx->userdata[0])
 
-constexpr int max_overlay_size = 512;
+constexpr int max_overlay_size = 2048;
 
 static void label_set_text(AMX* amx, lv_obj_t* label, cell str) {
   char* text;
@@ -464,10 +467,13 @@ static int AMXAPI prun_Overlay(AMX* amx, int index) {
   amx->code = (unsigned char*) amx_poolfind(&PAWN_INST->amx_pool, index);
 
   if (amx->code == NULL) {
+    NRF_LOG_INFO(LOG_PREFIX "Reading overlay %d, %d bytes", index, tbl->size);
+
     if ((amx->code = (unsigned char*) amx_poolalloc(&PAWN_INST->amx_pool, tbl->size, index)) == NULL)
       return AMX_ERR_OVERLAY;
 
-    memcpy(amx->code, PAWN_INST->file + hdr->cod + tbl->offset, tbl->size);
+    if (PAWN_INST->file->Read(amx->code, tbl->size, hdr->cod + tbl->offset) < (size_t) tbl->size)
+      return PAWN_ERR_FILE;
   }
 
   return AMX_ERR_NONE;
@@ -488,9 +494,12 @@ static int AMXAPI prun_Callback(struct tagAMX* amx, cell index, cell* result, co
 }
 
 int Pawn::LoadProgram() {
+  NRF_LOG_INFO(LOG_PREFIX "Loading program");
+
   int result;
   AMX_HEADER hdr;
-  memcpy(&hdr, file, sizeof(hdr));
+  if (file->Read((uint8_t*) &hdr, sizeof(hdr), 0) < sizeof(hdr))
+    return PAWN_ERR_FILE;
 
   if (hdr.magic != AMX_MAGIC)
     return AMX_ERR_FORMAT;
@@ -498,48 +507,57 @@ int Pawn::LoadProgram() {
   memset(&amx, 0, sizeof(amx));
   amx.userdata[0] = this;
 
-  header = malloc(hdr.cod);
+  header = std::make_unique<uint8_t[]>(hdr.cod);
   if (header == NULL)
     return AMX_ERR_MEMORY;
 
-  memcpy(header, file, hdr.cod);
+  if (file->Read((uint8_t*) header.get(), hdr.cod, 0) < (size_t) hdr.cod)
+    return PAWN_ERR_FILE;
 
-  datablock = malloc(hdr.stp - hdr.dat); // This block contains data, heap and stack
+  datablock = std::make_unique<uint8_t[]>(hdr.stp - hdr.dat); // This block contains data, heap and stack
   if (datablock == NULL)
     return AMX_ERR_MEMORY;
 
-  memcpy(datablock, file + hdr.dat, hdr.hea - hdr.dat);
-  amx.data = (unsigned char*) datablock;
+  if (file->Read((uint8_t*) datablock.get(), hdr.hea - hdr.dat, hdr.dat) < (size_t) hdr.hea - hdr.dat)
+    return PAWN_ERR_FILE;
+
+  amx.data = (unsigned char*) datablock.get();
 
   if (hdr.flags & AMX_FLAG_OVERLAY) {
+    NRF_LOG_INFO(LOG_PREFIX "Program has overlays");
+
     constexpr int overlaypool_overhead = 8;
-    overlaypool = malloc(max_overlay_size + overlaypool_overhead);
+    overlaypool = std::make_unique<uint8_t[]>(max_overlay_size + overlaypool_overhead);
     if (overlaypool == NULL)
       return AMX_ERR_MEMORY;
 
-    amx_poolinit(&amx_pool, overlaypool, max_overlay_size + overlaypool_overhead);
+    amx_poolinit(&amx_pool, overlaypool.get(), max_overlay_size + overlaypool_overhead);
 
     amx.overlay = prun_Overlay;
 
-    result = amx_Init(&amx, header);
-    if (result != AMX_ERR_NONE) {
-      free(header);
-      header = NULL;
-      free(datablock);
-      datablock = NULL;
-      free(overlaypool);
-      overlaypool = NULL;
-    }
+    result = amx_Init(&amx, header.get());
   } else {
+    NRF_LOG_INFO(LOG_PREFIX "Program doesn't have overlays");
+
     amx.flags |= AMX_FLAG_DSEG_INIT;
 
-    result = amx_Init(&amx, (void*) file);
-    if (result != AMX_ERR_NONE) {
-      free(header);
-      header = NULL;
-      free(datablock);
-      datablock = NULL;
+    // Happy path: the file is backed by a const array and we can reference it directly
+    const uint8_t* code = file->GetConst();
+
+    if (code == nullptr || true) {
+      // Slow path: we must read the whole file into memory
+      NRF_LOG_INFO(LOG_PREFIX "Loading program into RAM");
+
+      filecode = std::make_unique<uint8_t[]>(hdr.size);
+      if (file->Read(filecode.get(), hdr.size, 0) < (size_t) hdr.size)
+        return PAWN_ERR_FILE;
+
+      code = filecode.get();
+    } else {
+      NRF_LOG_INFO(LOG_PREFIX "Loaded program from constant")
     }
+
+    result = amx_Init(&amx, (void*) code);
   }
 
   return result;
@@ -547,11 +565,10 @@ int Pawn::LoadProgram() {
 
 #include "program.h"
 
-Pawn::Pawn(AppControllers& controllers) : Pawn(program, controllers) {
-  (void) program_len;
+Pawn::Pawn(AppControllers& controllers) : Pawn(controllers, std::make_unique<LfsFile>(controllers.filesystem, "/flash.amx")) {
 }
 
-Pawn::Pawn(const uint8_t* file, AppControllers& controllers) : controllers(controllers), file(file) {
+Pawn::Pawn(AppControllers& controllers, std::unique_ptr<File> file) : controllers(controllers), file(std::move(file)) {
   int result = LoadProgram();
   if (result != AMX_ERR_NONE) {
     ShowError(result);
@@ -604,13 +621,6 @@ Pawn::~Pawn() {
   CleanUI();
 
   amx_Cleanup(&amx);
-
-  if (header)
-    free(header);
-  if (datablock)
-    free(datablock);
-  if (overlaypool)
-    free(overlaypool);
 }
 
 void Pawn::Refresh() {
@@ -631,6 +641,8 @@ void Pawn::ShowError(unsigned int amx_err) {
     "missing event handler",    // PAWN_ERR_MISSINGHANDLER
     "invalid string",           // PAWN_ERR_INVALIDSTRING
     "invalid setting",          // PAWN_ERR_INVALIDSETTING
+    "invalid trampoline",       // PAWN_ERR_INVALIDTRAMPOLINE
+    "file read error",          // PAWN_ERR_FILE
   };
 
   if (amx_err == AMX_ERR_EXIT) {
