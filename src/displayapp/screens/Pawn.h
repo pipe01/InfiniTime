@@ -92,6 +92,8 @@ namespace Pinetime {
         amxPool amx_pool;
         std::unique_ptr<File> file;
 
+        bool is_errored = false;
+
       private:
         AMX amx;
 

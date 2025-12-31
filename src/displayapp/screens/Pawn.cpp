@@ -47,6 +47,9 @@ static void event_handler(lv_obj_t* obj, lv_event_t event) {
   AMX* amx = (AMX*) lv_obj_get_user_data(lv_scr_act());
   int handler_index = (int) lv_obj_get_user_data(obj);
 
+  if (PAWN_INST->is_errored)
+    return;
+
   amx_Push(amx, event);
   int result = amx_Exec(amx, nullptr, handler_index);
   if (result != AMX_ERR_NONE) {
@@ -662,6 +665,7 @@ void Pawn::ShowError(unsigned int amx_err) {
 }
 
 void Pawn::ShowError(const char* msg) {
+  is_errored = true;
   CleanUI();
 
   lv_obj_t* msglbl = lv_label_create(lv_scr_act(), nullptr);
@@ -687,7 +691,7 @@ void Pawn::QueueError(unsigned int amx_err) {
 }
 
 bool Pawn::OnTouchEvent(TouchEvents event) {
-  if (gesture_index < 0)
+  if (gesture_index < 0 || is_errored)
     return false;
 
   cell ret;
@@ -704,7 +708,7 @@ bool Pawn::OnTouchEvent(TouchEvents event) {
 }
 
 bool Pawn::OnTouchEvent(uint16_t x, uint16_t y) {
-  if (touch_index < 0)
+  if (touch_index < 0 || is_errored)
     return false;
 
   cell ret;
