@@ -87,7 +87,7 @@ namespace Pinetime {
         Utility::DirtyValue<std::chrono::time_point<std::chrono::system_clock, std::chrono::minutes>> currentDateTime {};
         AppControllers& controllers;
 
-        Widgets::StatusIcons* statusIcons = nullptr;
+        std::unique_ptr<Widgets::StatusIcons> statusIcons;
 
         amxPool amx_pool;
         std::unique_ptr<File> file;

@@ -296,10 +296,10 @@ static cell AMX_NATIVE_CALL F_read_datetime_short_str(AMX* amx, const cell* para
 static cell AMX_NATIVE_CALL F_status_icons_create(AMX* amx, const cell*) {
   Pawn* pawn = PAWN_INST;
 
-  if (pawn->statusIcons == nullptr) {
-    pawn->statusIcons = new Pinetime::Applications::Widgets::StatusIcons(pawn->controllers.batteryController,
-                                                                         pawn->controllers.bleController,
-                                                                         pawn->controllers.alarmController);
+  if (!pawn->statusIcons) {
+    pawn->statusIcons = std::make_unique<Pinetime::Applications::Widgets::StatusIcons>(pawn->controllers.batteryController,
+                                                                                       pawn->controllers.bleController,
+                                                                                       pawn->controllers.alarmController);
     pawn->statusIcons->Create();
   }
 
@@ -612,10 +612,7 @@ void Pawn::CleanUI() {
     taskRefresh = nullptr;
   }
 
-  if (statusIcons) {
-    delete statusIcons;
-    statusIcons = nullptr;
-  }
+  statusIcons.reset();
 
   lv_obj_clean(lv_scr_act());
 }
