@@ -1,0 +1,7 @@
+{
+  "hello_world": {
+    "source": "apps/hello_world.p",
+    "overlays": false,
+    "target_path": "/apps/"
+  }
+}
