@@ -50,13 +50,13 @@ main() {
   return $BUILD_RESULT
 }
 
-GetPawn() {
+GetPawn() (
   git clone -b v4.1.7152 https://codeberg.org/compuphase/pawn.git $TOOLS_DIR/pawn
   mkdir $TOOLS_DIR/pawn/build
   cd $TOOLS_DIR/pawn/build
   cmake ..
   make -j $(nproc) pawncc
-}
+)
 
 GetGcc() {
   wget -q https://developer.arm.com/-/media/Files/downloads/gnu-rm/$GCC_ARM_VER/$GCC_ARM_PATH-$MACHINE-linux.tar.bz2 -O - | tar -xj -C $TOOLS_DIR/
