@@ -36,6 +36,7 @@ main() {
   [ ! -d "$TOOLS_DIR/$GCC_ARM_PATH" ] && GetGcc
   [ ! -d "$TOOLS_DIR/$NRF_SDK_VER" ] && GetNrfSdk
   [ ! -d "$TOOLS_DIR/mcuboot" ] && GetMcuBoot
+  [ ! -f "$TOOLS_DIR/pawn/pawncc" ] && GetPawn
 
   mkdir -p "$BUILD_DIR"
 
@@ -47,6 +48,14 @@ main() {
   fi
   # assuming post_build.sh will never fail on a successful build
   return $BUILD_RESULT
+}
+
+GetPawn() {
+  git clone -b v4.1.7152 https://codeberg.org/compuphase/pawn.git $TOOLS_DIR/pawn
+  mkdir $TOOLS_DIR/pawn/build
+  cd $TOOLS_DIR/pawn/build
+  cmake ..
+  make -j $(nproc) pawncc
 }
 
 GetGcc() {
