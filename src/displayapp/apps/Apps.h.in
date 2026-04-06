@@ -30,6 +30,7 @@ namespace Pinetime {
       Steps,
       Dice,
       Weather,
+      Trains,
       PassKey,
       QuickSettings,
       Settings,

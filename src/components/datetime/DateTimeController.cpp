@@ -51,8 +51,8 @@ void DateTime::SetTime(uint16_t year, uint8_t month, uint8_t day, uint8_t hour, 
     /* .tm_year = */ year - 1900,
   };
 
-  NRF_LOG_INFO("%d %d %d ", day, month, year);
-  NRF_LOG_INFO("%d %d %d ", hour, minute, second);
+  // NRF_LOG_INFO("%d %d %d ", day, month, year);
+  // NRF_LOG_INFO("%d %d %d ", hour, minute, second);
 
   tm.tm_isdst = -1; // Use DST value from local time zone
 
