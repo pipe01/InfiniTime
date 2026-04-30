@@ -22,18 +22,17 @@ namespace Pinetime {
         void Refresh() override;
         bool OnTouchEvent(TouchEvents event) override;
 
-        void RequestUpdate();
-
       private:
         Pinetime::Controllers::TrainsService& trainsService;
         DisplayApp* app;
 
-        lv_task_t *taskRefresh, *taskRequestUpdate {};
+        lv_task_t *taskRefresh {}, *taskRequestUpdate {};
+        lv_obj_t *label_status, *label_update_age, *label_time;
 
         bool is_connected = false;
-        TickType_t updated_at = 0;
+        TickType_t updated_at = 0, time_updated_at = 0;
 
-        lv_obj_t *label_status, *container;
+        void UpdateTimeLabels(const Pinetime::Controllers::TrainsService::Schedule *sched, bool force);
 
         /** Watchapp */
       };

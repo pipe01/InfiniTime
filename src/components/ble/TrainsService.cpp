@@ -18,7 +18,7 @@ namespace {
   constexpr ble_uuid128_t trainsUuid {BaseUuid()};
 
   constexpr ble_uuid128_t trainsOpenUuid {CharUuid(0x01, 0x00)};
-  constexpr ble_uuid128_t trainsScheduleUuid {CharUuid(0x01, 0x00)};
+  constexpr ble_uuid128_t trainsScheduleUuid {CharUuid(0x02, 0x00)};
 
   int TrainsCallback(uint16_t /*conn_handle*/, uint16_t /*attr_handle*/, struct ble_gatt_access_ctxt* ctxt, void* arg) {
     return static_cast<Pinetime::Controllers::TrainsService*>(arg)->OnCommand(ctxt);
@@ -47,12 +47,26 @@ void Pinetime::Controllers::TrainsService::Init() {
   ASSERT(res == 0);
 }
 
+bool Pinetime::Controllers::TrainsService::OnOpened() {
+  uint16_t connectionHandle = nimble.connHandle();
+
+  if (connectionHandle == 0 || connectionHandle == BLE_HS_CONN_HANDLE_NONE) {
+    return false;
+  }
+
+  uint8_t v = 0;
+  auto* om = ble_hs_mbuf_from_flat(&v, sizeof(v));
+  ble_gattc_notify_custom(connectionHandle, eventOpenedHandle, om);
+
+  return true;
+}
+
 std::unique_ptr<char[]> read_string(uint8_t** ptr) {
   uint8_t label_len = *((*ptr)++);
   auto str = std::make_unique<char[]>(label_len + 1);
-  memcpy(str.get(), ptr, label_len);
+  memcpy(str.get(), *ptr, label_len);
   str.get()[label_len] = 0;
-  ptr += label_len;
+  *ptr += label_len;
 
   return str;
 }
@@ -67,15 +81,31 @@ int Pinetime::Controllers::TrainsService::OnCommand(ble_gatt_access_ctxt* ctxt) 
     if (ble_uuid_cmp(ctxt->chr->uuid, &trainsScheduleUuid.u) == 0) {
       uint8_t* ptr = data;
 
+      bool success = *ptr++;
+      if (!success) {
+        schedule = std::make_unique<Schedule>((Schedule) {
+          .isFailed = true,
+          .updatedAt = xTaskGetTickCount(),
+        });
+        return 0;
+      }
+
       uint16_t secondsUntilNext = ptr[0] | (ptr[1] << 8);
       ptr += 2;
+      uint16_t delaySeconds = ptr[0] | (ptr[1] << 8);
+      ptr += 2;
 
-      auto current_station = read_string(&ptr);
+      // uint8_t destination = *ptr++;
+
+      auto orig_station = read_string(&ptr);
+      auto dest_station = read_string(&ptr);
 
       schedule = std::make_unique<Schedule>((Schedule) {
         .updatedAt = xTaskGetTickCount(),
-        .nextTrainAt = xTaskGetTickCount() + pdMS_TO_TICKS((TickType_t) secondsUntilNext * 1000),
-        .currentStation = std::move(current_station),
+        .nextTrainInSeconds = secondsUntilNext,
+        .delaySeconds = delaySeconds,
+        .originName = std::move(orig_station),
+        .destinationName = std::move(dest_station),
       });
     }
   }

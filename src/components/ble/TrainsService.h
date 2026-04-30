@@ -13,22 +13,33 @@ namespace Pinetime {
 
     class TrainsService {
     public:
-      struct Schedule 
-      {
+      enum Destination {
+        Home,
+        Work,
+      };
+
+      struct Schedule {
+        bool isFailed;
         TickType_t updatedAt;
-        TickType_t nextTrainAt;
-        std::unique_ptr<char[]> currentStation;
+        uint16_t nextTrainInSeconds, delaySeconds;
+        std::unique_ptr<char[]> originName, destinationName;
       };
 
       TrainsService(NimbleController& nimble);
       void Init();
 
+      bool OnOpened();
+
+      void OnClosed() {
+        schedule.reset();
+      }
+
       int OnCommand(struct ble_gatt_access_ctxt* ctxt);
 
-      std::optional<const Schedule*> GetSchedule() {
+      const Schedule* GetSchedule() {
         if (schedule)
-          return std::make_optional(schedule.get());
-        return std::nullopt;
+          return schedule.get();
+        return nullptr;
       }
 
     private:
